@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & test (SwiftPM)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Swift build
+        run: swift build
+
+      - name: Swift test
+        run: swift test
+
+  example-app:
+    name: Build example app
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build ChattySDKExample for iOS Simulator
+        run: |
+          xcodebuild build \
+            -project Example/ChattySDKExample.xcodeproj \
+            -scheme ChattySDKExample \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO
+
+  lint-podspec:
+    name: Lint CocoaPods podspec
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: pod spec lint
+        run: pod spec lint ChattySDK.podspec --allow-warnings --skip-import-validation

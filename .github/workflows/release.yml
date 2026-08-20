@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-xcframework:
+    name: Build XCFramework & publish
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Verify swift build
+        run: swift build -c release
+
+      - name: Archive for iOS device
+        run: |
+          xcodebuild archive \
+            -scheme ChattySDK \
+            -destination "generic/platform=iOS" \
+            -archivePath build/ChattySDK-iOS \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+
+      - name: Archive for iOS Simulator
+        run: |
+          xcodebuild archive \
+            -scheme ChattySDK \
+            -destination "generic/platform=iOS Simulator" \
+            -archivePath build/ChattySDK-iOS-Simulator \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+
+      - name: Create XCFramework
+        run: |
+          xcodebuild -create-xcframework \
+            -framework build/ChattySDK-iOS.xcarchive/Products/Library/Frameworks/ChattySDK.framework \
+            -framework build/ChattySDK-iOS-Simulator.xcarchive/Products/Library/Frameworks/ChattySDK.framework \
+            -output build/ChattySDK.xcframework
+
+      - name: Zip XCFramework
+        run: cd build && zip -r ChattySDK.xcframework.zip ChattySDK.xcframework
+
+      # CocoaPods Trunk publish requires COCOAPODS_TRUNK_TOKEN (from `pod
+      # trunk register`) as a repo secret — skipped automatically until set.
+      - name: Publish to CocoaPods Trunk
+        if: ${{ vars.COCOAPODS_ENABLED == 'true' }}
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+        run: |
+          sudo gem install cocoapods --no-document
+          pod trunk push ChattySDK.podspec --allow-warnings
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: build/ChattySDK.xcframework.zip
