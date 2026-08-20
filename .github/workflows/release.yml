@@ -27,8 +27,10 @@ jobs:
             -scheme ChattySDK \
             -destination "generic/platform=iOS" \
             -archivePath build/ChattySDK-iOS \
+            -derivedDataPath build/DerivedData-iOS \
             SKIP_INSTALL=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            INSTALL_PATH=/Library/Frameworks
 
       - name: Archive for iOS Simulator
         run: |
@@ -36,8 +38,10 @@ jobs:
             -scheme ChattySDK \
             -destination "generic/platform=iOS Simulator" \
             -archivePath build/ChattySDK-iOS-Simulator \
+            -derivedDataPath build/DerivedData-iOS-Simulator \
             SKIP_INSTALL=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            INSTALL_PATH=/Library/Frameworks
 
       # The exact path xcodebuild places the built .framework at inside the
       # archive varies by Xcode/SPM version, so locate it instead of
@@ -45,11 +49,11 @@ jobs:
       - name: Locate built frameworks
         id: locate
         run: |
-          device_fw=$(find build/ChattySDK-iOS.xcarchive -name "ChattySDK.framework" -type d | head -1)
-          sim_fw=$(find build/ChattySDK-iOS-Simulator.xcarchive -name "ChattySDK.framework" -type d | head -1)
+          device_fw=$(find build -path "*ChattySDK-iOS.xcarchive*ChattySDK.framework" -type d | head -1)
+          sim_fw=$(find build -path "*ChattySDK-iOS-Simulator.xcarchive*ChattySDK.framework" -type d | head -1)
           if [ -z "$device_fw" ] || [ -z "$sim_fw" ]; then
             echo "::error::Could not locate ChattySDK.framework in one or both archives"
-            find build -maxdepth 6 -type d
+            find build -maxdepth 8 \( -type d -o -name "*.framework" \)
             exit 1
           fi
           echo "device_fw=$device_fw" >> "$GITHUB_OUTPUT"
