@@ -84,3 +84,42 @@ jobs:
         with:
           generate_release_notes: true
           files: build/ChattySDK.xcframework.zip
+
+  example-app-simulator:
+    name: Build example app (Simulator)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      # Unsigned Simulator build only — a real device .ipa needs an Apple
+      # Developer Program certificate + provisioning profile, which this
+      # repo doesn't have configured. This lets anyone try the example app
+      # in Simulator without building it themselves.
+      - name: Build example app for iOS Simulator
+        run: |
+          xcodebuild build \
+            -project Example/ChattySDKExample.xcodeproj \
+            -scheme ChattySDKExample \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build/DerivedData-Example \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Zip the .app bundle
+        run: |
+          app_path=$(find build/DerivedData-Example -name "ChattySDKExample.app" -type d | head -1)
+          if [ -z "$app_path" ]; then
+            echo "::error::Could not locate ChattySDKExample.app"
+            find build/DerivedData-Example -maxdepth 6 -type d
+            exit 1
+          fi
+          mkdir -p build/dist
+          cp -R "$app_path" build/dist/ChattySDKExample.app
+          cd build/dist && zip -r ChattySDKExample-simulator.zip ChattySDKExample.app
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/dist/ChattySDKExample-simulator.zip
