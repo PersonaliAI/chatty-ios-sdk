@@ -56,14 +56,14 @@ Or add it to `Package.swift` directly:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/PersonaliAI/chatty-ios-sdk", from: "1.0.1")
+    .package(url: "https://github.com/PersonaliAI/chatty-ios-sdk", from: "1.0.2")
 ]
 ```
 
 ### CocoaPods
 
 ```ruby
-pod 'ChattySDK', '~> 1.0.1'
+pod 'ChattySDK', '~> 1.0.2'
 ```
 
 ## Quick start
