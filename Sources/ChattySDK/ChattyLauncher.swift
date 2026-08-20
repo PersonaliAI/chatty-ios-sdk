@@ -6,9 +6,9 @@ public enum ChattyPosition {
 
 /// Floating launcher button + full-screen sheet chat panel — the native-SDK
 /// equivalent of widget.js's launcher button + iframe panel. Add as an overlay
-/// on your root view: `.overlay(ChattyLauncher(botId: "..."))`. The button
-/// color follows the selected design's own accent (same as web's
-/// LAUNCHER_STYLES) unless `color` is explicitly passed, which always wins.
+/// on your root view: `.overlay(ChattyLauncher(botId: "..."))`. 60pt (widget.js:
+/// 60x60px), button color/shadow follow the selected design's own
+/// LAUNCHER_STYLES entry unless `color` is explicitly passed, which always wins.
 public struct ChattyLauncher: View {
     let botId: String
     let baseURL: String
@@ -18,7 +18,7 @@ public struct ChattyLauncher: View {
 
     @State private var open = false
     @State private var unread = 0
-    @State private var designAccent = Color(red: 0.976, green: 0.451, blue: 0.086)
+    @State private var designId = "minimal"
 
     public init(
         botId: String,
@@ -34,7 +34,9 @@ public struct ChattyLauncher: View {
         self.colorOverride = color
     }
 
-    private var resolvedColor: Color { colorOverride ?? designAccent }
+    private var tokens: ChattyDesignTokens { chattyDesignTokens[designId] ?? chattyDesignTokens["minimal"]! }
+    private var resolvedColor: Color { colorOverride ?? tokens.launcherBg }
+    private var isGradient: Bool { colorOverride == nil && designId == "gradient-glow" }
 
     public var body: some View {
         VStack {
@@ -45,19 +47,19 @@ public struct ChattyLauncher: View {
                     Button(action: { open = true; unread = 0 }) {
                         Text("💬")
                             .font(.system(size: 24))
-                            .frame(width: 58, height: 58)
-                            .background(resolvedColor)
+                            .frame(width: 60, height: 60)
+                            .background(isGradient ? AnyView(gradientBackground) : AnyView(resolvedColor))
                             .clipShape(Circle())
-                            .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+                            .shadow(color: tokens.launcherShadow, radius: 10, y: 4)
                     }
                     if unread > 0 {
                         Text(unread > 9 ? "9+" : "\(unread)")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.white)
-                            .padding(4)
-                            .frame(minWidth: 18, minHeight: 18)
-                            .background(Color.red)
-                            .clipShape(Circle())
+                            .padding(.horizontal, 5)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .background(Color(red: 0.937, green: 0.267, blue: 0.267))
+                            .clipShape(Capsule())
                             .offset(x: 4, y: -4)
                     }
                 }
@@ -70,17 +72,22 @@ public struct ChattyLauncher: View {
                 if !open { unread += 1 }
             }
         }
-        .task { await loadDesignAccent() }
+        .task { await loadDesign() }
     }
 
-    private func loadDesignAccent() async {
-        guard colorOverride == nil else { return } // explicit override always wins, no need to fetch
+    private var gradientBackground: some View {
+        LinearGradient(
+            colors: chattyGradientGlowHeaderColors.map { Color(hex: $0) },
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+    }
+
+    private func loadDesign() async {
         do {
             let theme = try await ChattyClient(botId: botId, baseURL: baseURL, host: host).getTheme()
-            let designId = chattyNormalizeWidgetStyle(theme.widget_style)
-            designAccent = (chattyDesignTokens[designId] ?? chattyDesignTokens["minimal"]!).userBubbleBg
+            designId = chattyNormalizeWidgetStyle(theme.widget_style)
         } catch {
-            // keep the fallback accent — a failed theme fetch shouldn't block the button from rendering
+            // keep the fallback design — a failed theme fetch shouldn't block the button from rendering
         }
     }
 }
