@@ -1,6 +1,6 @@
 import Foundation
 
-public let chattyDefaultBaseURL = "https://personaliai-api-376030619262.us-central1.run.app"
+public let chattyDefaultBaseURL = "https://api.chatty.personaliai.com"
 
 public struct ChattyTheme: Decodable {
     public let name: String?
@@ -92,6 +92,47 @@ public final class ChattyClient {
         let (data, response) = try await session.data(for: request)
         try Self.checkStatus(response)
         return try Self.decode(data)
+    }
+
+    public func sendMessageStream(sessionId: String, text: String, visitorTimezone: String = "UTC") async throws -> AsyncThrowingStream<String, Error> {
+        var request = URLRequest(url: URL(string: "\(baseURL)/api/widget/chat/stream")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = [
+            "bot_id": botId,
+            "session_id": sessionId,
+            "text": text,
+            "visitor_timezone": visitorTimezone,
+        ]
+        if let host { body["host"] = host }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await session.bytes(for: request)
+        try Self.checkStatus(response)
+
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    for try await line in bytes.lines {
+                        if line.hasPrefix("data: ") {
+                            let jsonString = String(line.dropFirst(6))
+                            guard let data = jsonString.data(using: .utf8) else { continue }
+                            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                                if let done = json["done"] as? Bool, done {
+                                    continuation.finish()
+                                    return
+                                } else if let token = json["token"] as? String {
+                                    continuation.yield(token)
+                                }
+                            }
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
     }
 
     public func sendMedia(sessionId: String, fileURL: URL, mimeType: String, text: String = "", visitorTimezone: String = "UTC") async throws -> ChattyChatResponse {

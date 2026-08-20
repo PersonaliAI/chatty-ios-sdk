@@ -1,10 +1,10 @@
 import Foundation
 
-public enum ChattyRole {
+public enum ChattyRole: String, Codable {
     case user, assistant, agent
 }
 
-public struct ChattyMessage: Identifiable {
+public struct ChattyMessage: Identifiable, Codable {
     public let id: String
     public let role: ChattyRole
     public let text: String
@@ -60,13 +60,15 @@ public final class ChattyViewModel: ObservableObject {
 
     public func load() {
         guard !ready else { return }
+        loadMessages()
         Task {
             do {
                 let theme = try await client.getTheme()
                 self.theme = theme
                 self.sessionId = ChattySession.getOrCreateSessionId(botId: botId, hostKey: hostKey)
-                if let welcome = theme.welcome_message, !welcome.isEmpty {
+                if self.messages.isEmpty, let welcome = theme.welcome_message, !welcome.isEmpty {
                     self.messages = [ChattyMessage(id: "welcome", role: .assistant, text: welcome)]
+                    self.saveMessages()
                 }
                 self.ready = true
                 startPolling()
@@ -78,6 +80,22 @@ public final class ChattyViewModel: ObservableObject {
 
     deinit {
         pollTask?.cancel()
+    }
+
+    private func saveMessages() {
+        let key = "chatty_msgs_\(botId)_\(hostKey)"
+        let toSave = Array(messages.suffix(100))
+        if let data = try? JSONEncoder().encode(toSave) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    private func loadMessages() {
+        let key = "chatty_msgs_\(botId)_\(hostKey)"
+        if let data = UserDefaults.standard.data(forKey: key),
+           let cached = try? JSONDecoder().decode([ChattyMessage].self, from: data) {
+            self.messages = cached
+        }
     }
 
     private func startPolling() {
@@ -95,6 +113,7 @@ public final class ChattyViewModel: ObservableObject {
                             ChattyMessage(role: $0.sender == "agent" ? .agent : .assistant, text: $0.content, createdAt: $0.created_at)
                         }
                         self.messages.append(contentsOf: newMessages)
+                        self.saveMessages()
                         newMessages.forEach { self.onMessage?($0) }
                     }
                     self.aiPaused = res.ai_paused ?? false
@@ -106,9 +125,14 @@ public final class ChattyViewModel: ObservableObject {
     }
 
     public func sendText(_ text: String) {
+        if #available(iOS 15.0, *) {
+            sendTextStream(text)
+            return
+        }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let sid = sessionId else { return }
         messages.append(ChattyMessage(role: .user, text: trimmed))
+        saveMessages()
         sending = true
         error = nil
         Task {
@@ -118,6 +142,7 @@ public final class ChattyViewModel: ObservableObject {
                 if !(res.ai_paused ?? false), !res.reply.isEmpty {
                     let reply = ChattyMessage(role: .assistant, text: res.reply)
                     self.messages.append(reply)
+                    self.saveMessages()
                     self.onMessage?(reply)
                 }
             } catch {
@@ -127,9 +152,45 @@ public final class ChattyViewModel: ObservableObject {
         }
     }
 
+    @available(iOS 15.0, *)
+    public func sendTextStream(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let sid = sessionId else { return }
+        messages.append(ChattyMessage(role: .user, text: trimmed))
+        saveMessages()
+        sending = true
+        error = nil
+        Task {
+            do {
+                let stream = try await client.sendMessageStream(sessionId: sid, text: trimmed, visitorTimezone: visitorTimezone)
+                let replyId = UUID().uuidString
+                var currentReplyText = ""
+                let initialReply = ChattyMessage(id: replyId, role: .assistant, text: currentReplyText)
+                self.messages.append(initialReply)
+                self.saveMessages()
+                
+                for try await token in stream {
+                    currentReplyText += token
+                    if let index = self.messages.firstIndex(where: { $0.id == replyId }) {
+                        self.messages[index] = ChattyMessage(id: replyId, role: .assistant, text: currentReplyText, createdAt: initialReply.createdAt)
+                    }
+                }
+                self.saveMessages()
+                if let finalMsg = self.messages.first(where: { $0.id == replyId }) {
+                    self.onMessage?(finalMsg)
+                }
+            } catch {
+                self.error = error.localizedDescription
+                // fallback to regular sendText if stream fails? Or just show error.
+            }
+            self.sending = false
+        }
+    }
+
     public func sendImage(fileURL: URL, mimeType: String, caption: String = "") {
         guard let sid = sessionId else { return }
         messages.append(ChattyMessage(role: .user, text: caption, fileURL: fileURL))
+        saveMessages()
         sending = true
         error = nil
         Task {
@@ -139,6 +200,7 @@ public final class ChattyViewModel: ObservableObject {
                 if !(res.ai_paused ?? false), !res.reply.isEmpty {
                     let reply = ChattyMessage(role: .assistant, text: res.reply)
                     self.messages.append(reply)
+                    self.saveMessages()
                     self.onMessage?(reply)
                 }
             } catch {
