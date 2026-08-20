@@ -7,7 +7,7 @@ welcome.
 ## Development setup
 
 ```bash
-git clone https://github.com/Damayantha/chatty-ios-sdk.git
+git clone https://github.com/PersonaliAI/chatty-ios-sdk.git
 cd chatty-ios-sdk
 open Package.swift   # opens in Xcode via Swift Package Manager
 ```

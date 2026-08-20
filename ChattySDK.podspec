@@ -9,10 +9,10 @@ Pod::Spec.new do |s|
     no JS bridge. Automatically matches whichever of the 10 Chatty
     widget designs is selected for the bot in the dashboard.
   DESC
-  s.homepage         = "https://github.com/Damayantha/chatty-ios-sdk"
+  s.homepage         = "https://github.com/PersonaliAI/chatty-ios-sdk"
   s.license          = { :type => "MIT", :file => "LICENSE" }
   s.author           = { "Damayantha" => "damayanthakat@gmail.com" }
-  s.source           = { :git => "https://github.com/Damayantha/chatty-ios-sdk.git", :tag => "v#{s.version}" }
+  s.source           = { :git => "https://github.com/PersonaliAI/chatty-ios-sdk.git", :tag => "v#{s.version}" }
 
   s.ios.deployment_target = "15.0"
   s.osx.deployment_target = "13.0"

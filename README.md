@@ -6,7 +6,7 @@ Drop a fully native, on-brand support chat into any iOS app. The SDK talks direc
 `/api/widget/*` backend as the Chatty web widget and renders every message, bubble, and composer
 with real SwiftUI views — no WKWebView, no JS bridge.
 
-[![CI](https://github.com/Damayantha/chatty-ios-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/Damayantha/chatty-ios-sdk/actions/workflows/ci.yml)
+[![CI](https://github.com/PersonaliAI/chatty-ios-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/PersonaliAI/chatty-ios-sdk/actions/workflows/ci.yml)
 [![SPM compatible](https://img.shields.io/badge/SPM-compatible-brightgreen.svg)](#install)
 [![CocoaPods](https://img.shields.io/cocoapods/v/ChattySDK.svg)](https://cocoapods.org/pods/ChattySDK)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -49,14 +49,14 @@ with real SwiftUI views — no WKWebView, no JS bridge.
 In Xcode: **File → Add Package Dependencies…** and enter:
 
 ```
-https://github.com/Damayantha/chatty-ios-sdk
+https://github.com/PersonaliAI/chatty-ios-sdk
 ```
 
 Or add it to `Package.swift` directly:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Damayantha/chatty-ios-sdk", from: "1.0.1")
+    .package(url: "https://github.com/PersonaliAI/chatty-ios-sdk", from: "1.0.1")
 ]
 ```
 
