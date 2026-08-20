@@ -211,12 +211,24 @@ public struct ChattyChatView: View {
                 }
             }
 
-            TextField("Type a message…", text: $input, axis: .vertical)
-                .lineLimit(1...4)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color(red: 0.976, green: 0.98, blue: 0.984))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+            // The multiline `axis:`/ranged `lineLimit` TextField APIs need
+            // iOS 16 — this package's deployment target is iOS 15, so fall
+            // back to a single-line field there (same pattern as the photo
+            // picker button above).
+            if #available(iOS 16.0, *) {
+                TextField("Type a message…", text: $input, axis: .vertical)
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color(red: 0.976, green: 0.98, blue: 0.984))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+            } else {
+                TextField("Type a message…", text: $input)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color(red: 0.976, green: 0.98, blue: 0.984))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+            }
             Button(action: send) {
                 Image(systemName: "arrow.up")
                     .foregroundColor(t.userBubbleText)

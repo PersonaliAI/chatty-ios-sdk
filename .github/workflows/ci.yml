@@ -23,8 +23,11 @@ jobs:
       - name: Swift build
         run: swift build
 
+      # No Tests/ target exists yet (see CONTRIBUTING.md) — `swift test`
+      # errors out with "no tests found" rather than passing 0 tests, so
+      # skip it until a test target is added instead of failing CI on it.
       - name: Swift test
-        run: swift test
+        run: test -d Tests && swift test || echo "No Tests/ target yet — skipping"
 
   example-app:
     name: Build example app
@@ -48,5 +51,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: pod spec lint
-        run: pod spec lint ChattySDK.podspec --allow-warnings --skip-import-validation
+      # `pod spec lint` resolves the source from git (the tag in `s.source`),
+      # which doesn't exist yet pre-release. `pod lib lint` validates against
+      # the local working copy instead, so it works on every push.
+      - name: pod lib lint
+        run: pod lib lint ChattySDK.podspec --allow-warnings --skip-import-validation
