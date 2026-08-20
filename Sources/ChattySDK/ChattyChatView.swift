@@ -1,22 +1,46 @@
 import SwiftUI
 import PhotosUI
+#if os(iOS)
+import AVFoundation
+import UIKit
+#endif
 
-/// Full Chatty chat screen: header, message list, conversation starters, typing
-/// indicator, and composer. Equivalent to the web widget's embed iframe content —
-/// sizing/spacing/structure below is ported 1:1 from EmbedClient.tsx + globals.css.
+/// Full Chatty chat screen: header (with voice/notification/clear-chat actions),
+/// message list, conversation starters, typing indicator, and composer (emoji
+/// picker, attach menu, mic recording). Equivalent to the web widget's embed
+/// iframe content — sizing/spacing/structure below is ported 1:1 from
+/// EmbedClient.tsx + globals.css + widget.js.
+///
+/// Mic recording and camera capture are iOS-only (guarded via `#if os(iOS)`
+/// throughout) since this package also builds for macOS, where
+/// AVAudioSession/UIImagePickerController don't exist — those two composer
+/// buttons simply don't appear when built for macOS.
 public struct ChattyChatView: View {
     @StateObject private var viewModel: ChattyViewModel
     @State private var input: String = ""
+
+    /// Called when the header's voice-call button is tapped (only shown when the bot's
+    /// dashboard has voice enabled). This SDK doesn't bundle a voice-call implementation
+    /// itself (that's a separate LiveKit integration) — wire this up if your app has one.
+    public var onVoiceCallPress: (() -> Void)?
+    /// Called when the header's notification-bell button is tapped. Native apps manage
+    /// push notifications through their own infrastructure (FCM/APNs), so this SDK
+    /// doesn't subscribe to anything itself — wire this up to your app's own opt-in flow.
+    public var onNotificationBellPress: (() -> Void)?
 
     public init(
         botId: String,
         baseURL: String = chattyDefaultBaseURL,
         host: String? = nil,
-        onMessage: ((ChattyMessage) -> Void)? = nil
+        onMessage: ((ChattyMessage) -> Void)? = nil,
+        onVoiceCallPress: (() -> Void)? = nil,
+        onNotificationBellPress: (() -> Void)? = nil
     ) {
         let vm = ChattyViewModel(botId: botId, baseURL: baseURL, host: host)
         vm.onMessage = onMessage
         _viewModel = StateObject(wrappedValue: vm)
+        self.onVoiceCallPress = onVoiceCallPress
+        self.onNotificationBellPress = onNotificationBellPress
     }
 
     /// Falls back to primary_color-on-white when the bot uses an unrecognized
@@ -64,8 +88,9 @@ public struct ChattyChatView: View {
         // px-4 pt-3 pb-2 on web -> 16pt horizontal, 12pt top, 8pt bottom.
         let content = HStack(spacing: 10) {
             // 44pt avatar circle (web: size-11), logo image at 34pt if set, else an icon at 24pt.
+            let logoBg = chattyLogoBgColor(viewModel.theme?.widget_style) ?? t.headerText.opacity(0.08)
             ZStack {
-                Circle().fill(t.headerText.opacity(0.08)).frame(width: 44, height: 44)
+                Circle().fill(logoBg).frame(width: 44, height: 44)
                 if let urlStr = viewModel.theme?.logo_url, let url = URL(string: urlStr) {
                     AsyncImage(url: url) { $0.resizable() } placeholder: { Color.clear }
                         .frame(width: 34, height: 34)
@@ -89,6 +114,11 @@ public struct ChattyChatView: View {
                 }
             }
             Spacer()
+            if viewModel.theme?.voice_enabled == true {
+                headerActionButton(systemName: "phone.fill", tint: t.headerText) { onVoiceCallPress?() }
+            }
+            headerActionButton(systemName: "bell.fill", tint: t.headerText) { onNotificationBellPress?() }
+            headerActionButton(systemName: "arrow.counterclockwise", tint: t.headerText) { viewModel.clearChat() }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -103,6 +133,15 @@ public struct ChattyChatView: View {
             )
         } else {
             content.background(t.headerBg)
+        }
+    }
+
+    private func headerActionButton(systemName: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14))
+                .foregroundColor(tint)
+                .frame(width: 28, height: 28)
         }
     }
 
@@ -243,26 +282,66 @@ public struct ChattyChatView: View {
             .background(bg)
     }
 
-    @State private var showPhotoAlert = false
+    @State private var showEmojiPicker = false
+    @State private var showAttachMenu = false
+    #if os(iOS)
+    @State private var showCameraPicker = false
+    @State private var isRecording = false
+    @State private var recordingSeconds = 0
+    @State private var audioRecorder: AVAudioRecorder?
+    @State private var recordingURL: URL?
+    @State private var recordingTimer: Timer?
+    #endif
 
     private func composer(t: ChattyDesignTokens, accent: Color) -> some View {
         // Bordered rounded-16pt bar with the input on top and an icon row
-        // (attach + send) below, matching .chat-input-bar on web.
+        // (emoji + attach + mic + send) below, matching .chat-input-bar on web.
         VStack(alignment: .leading, spacing: 4) {
-            attachAndInputField(t: t)
-            HStack {
-                if #available(iOS 16.0, *) {
-                    PhotoPickerButton(color: Color(red: 0.61, green: 0.64, blue: 0.69), viewModel: viewModel)
-                } else {
-                    Button(action: { showPhotoAlert = true }) {
-                        Image(systemName: "paperclip")
-                            .foregroundColor(Color(red: 0.61, green: 0.64, blue: 0.69))
-                            .frame(width: 28, height: 28)
+            if showEmojiPicker {
+                emojiPicker
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
+            if showAttachMenu {
+                attachMenu(t: t)
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
+
+            #if os(iOS)
+            if isRecording {
+                recordingIndicator
+            } else {
+                inputField
+            }
+            #else
+            inputField
+            #endif
+
+            HStack(spacing: 2) {
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        showEmojiPicker.toggle(); showAttachMenu = false
                     }
-                    .alert(isPresented: $showPhotoAlert) {
-                        Alert(title: Text("Not Supported"), message: Text("Photo picker requires iOS 16+."), dismissButton: .default(Text("OK")))
-                    }
+                }) {
+                    Image(systemName: "face.smiling")
+                        .foregroundColor(Color(red: 0.61, green: 0.64, blue: 0.69))
+                        .frame(width: 28, height: 28)
                 }
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        showAttachMenu.toggle(); showEmojiPicker = false
+                    }
+                }) {
+                    Image(systemName: "paperclip")
+                        .foregroundColor(Color(red: 0.61, green: 0.64, blue: 0.69))
+                        .frame(width: 28, height: 28)
+                }
+                #if os(iOS)
+                Button(action: { isRecording ? stopRecordingAndTranscribe() : requestMicAndRecord() }) {
+                    Image(systemName: isRecording ? "stop.circle.fill" : "mic")
+                        .foregroundColor(isRecording ? Color(red: 0.937, green: 0.267, blue: 0.267) : Color(red: 0.61, green: 0.64, blue: 0.69))
+                        .frame(width: 28, height: 28)
+                }
+                #endif
                 Spacer()
                 ChattySendButton(
                     style: viewModel.theme?.send_button_style,
@@ -280,10 +359,26 @@ public struct ChattyChatView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(t.headerText.opacity(0.12)))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .padding(10)
+        .alert("Not Supported", isPresented: $showPhotoAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Photo picker requires iOS 16+.")
+        }
+        #if os(iOS)
+        .sheet(isPresented: $showCameraPicker) {
+            CameraPicker { image in
+                if let data = image.jpegData(compressionQuality: 0.9) {
+                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+                    try? data.write(to: tempURL)
+                    viewModel.sendImage(fileURL: tempURL, mimeType: "image/jpeg", caption: "")
+                }
+            }
+        }
+        #endif
     }
 
     @ViewBuilder
-    private func attachAndInputField(t: ChattyDesignTokens) -> some View {
+    private var inputField: some View {
         // The multiline `axis:`/ranged `lineLimit` TextField APIs need
         // iOS 16 — this package's deployment target is iOS 15, so fall
         // back to a single-line field there.
@@ -297,9 +392,143 @@ public struct ChattyChatView: View {
         }
     }
 
+    private var emojiPicker: some View {
+        let columns = Array(repeating: GridItem(.flexible()), count: 8)
+        return LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(ChattyEmojis.all, id: \.self) { emoji in
+                Text(emoji)
+                    .font(.system(size: 18))
+                    .frame(width: 32, height: 32)
+                    .onTapGesture { input += emoji }
+            }
+        }
+        .frame(height: 160)
+    }
+
+    private func attachMenu(t: ChattyDesignTokens) -> some View {
+        HStack(spacing: 12) {
+            #if os(iOS)
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                attachMenuOption(systemName: "camera.fill", label: "Camera") {
+                    showAttachMenu = false
+                    showCameraPicker = true
+                }
+            }
+            #endif
+            if #available(iOS 16.0, macOS 13.0, *) {
+                PhotoLibraryOption(onPicked: { url in
+                    showAttachMenu = false
+                    viewModel.sendImage(fileURL: url, mimeType: "image/jpeg", caption: "")
+                })
+            } else {
+                attachMenuOption(systemName: "photo.fill", label: "Photo Library") {
+                    showAttachMenu = false
+                    showPhotoAlert = true
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func attachMenuOption(systemName: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: systemName)
+                    .font(.system(size: 20))
+                    .foregroundColor(Color(red: 0.29, green: 0.33, blue: 0.39))
+                Text(label)
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(red: 0.29, green: 0.33, blue: 0.39))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color(red: 0.953, green: 0.957, blue: 0.965))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    @State private var showPhotoAlert = false
+
+    #if os(iOS)
+    private var recordingIndicator: some View {
+        HStack {
+            HStack(spacing: 8) {
+                ChattyPulsingDot(color: Color(red: 0.937, green: 0.267, blue: 0.267), size: 8)
+                Text(String(format: "Recording… %d:%02d", recordingSeconds / 60, recordingSeconds % 60))
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.42, green: 0.45, blue: 0.5))
+            }
+            Spacer()
+            Button("Stop", action: stopRecordingAndTranscribe)
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func requestMicAndRecord() {
+        AVAudioSession.sharedInstance().requestRecordPermission { granted in
+            DispatchQueue.main.async {
+                if granted { self.startRecording() }
+            }
+        }
+    }
+
+    private func startRecording() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.record, mode: .default)
+            try session.setActive(true)
+        } catch {
+            return
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".m4a")
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 44100,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+        ]
+        do {
+            let recorder = try AVAudioRecorder(url: url, settings: settings)
+            recorder.record()
+            audioRecorder = recorder
+            recordingURL = url
+            recordingSeconds = 0
+            isRecording = true
+            recordingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                recordingSeconds += 1
+            }
+        } catch {
+            // mic busy/unavailable — silently no-op rather than crash the composer
+        }
+    }
+
+    private func stopRecordingAndTranscribe() {
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        isRecording = false
+        audioRecorder?.stop()
+        try? AVAudioSession.sharedInstance().setActive(false)
+        guard let url = recordingURL, recordingSeconds >= 1 else {
+            audioRecorder = nil
+            recordingURL = nil
+            return
+        }
+        audioRecorder = nil
+        recordingURL = nil
+        viewModel.transcribeVoiceNote(fileURL: url, mimeType: "audio/mp4") { text in
+            if let text, !text.isEmpty {
+                input = input.isEmpty ? text : "\(input) \(text)"
+            }
+        }
+    }
+    #endif
+
     private func send() {
         let text = input
         input = ""
+        showEmojiPicker = false
+        showAttachMenu = false
         viewModel.sendText(text)
     }
 }
@@ -316,14 +545,25 @@ func chattyAvatarSymbol(_ avatarIcon: String?) -> String {
     }
 }
 
+enum ChattyEmojis {
+    static let all = [
+        "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "😇",
+        "🥰", "😍", "🤩", "😘", "😋", "😛", "🤪", "😜", "🤔", "🤨", "😐", "😑",
+        "😶", "🙄", "😏", "😒", "😬", "🙁", "😢", "😭", "😤", "😡", "🥳", "😴",
+        "🤗", "🤝", "👍", "👎", "👏", "🙌", "🙏", "💪", "👋", "✌️", "🤞", "❤️",
+        "🔥", "✨", "🎉", "🎊", "⭐", "💯", "✅", "❌", "❓", "❗", "💬", "👀",
+    ]
+}
+
 private struct ChattyPulsingDot: View {
     let color: Color
+    var size: CGFloat = 6
     @State private var dim = false
 
     var body: some View {
         Circle()
             .fill(color.opacity(dim ? 0.5 : 1))
-            .frame(width: 6, height: 6)
+            .frame(width: size, height: size)
             .onAppear {
                 withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) {
                     dim = true
@@ -404,17 +644,25 @@ private struct ChattySendButton: View {
     }
 }
 
-@available(iOS 16.0, *)
-private struct PhotoPickerButton: View {
+@available(iOS 16.0, macOS 13.0, *)
+private struct PhotoLibraryOption: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
-    let color: Color
-    let viewModel: ChattyViewModel
+    let onPicked: (URL) -> Void
 
     var body: some View {
         PhotosPicker(selection: $selectedPhotoItem, matching: .images, photoLibrary: .shared()) {
-            Image(systemName: "paperclip")
-                .foregroundColor(color)
-                .frame(width: 28, height: 28)
+            VStack(spacing: 4) {
+                Image(systemName: "photo.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(Color(red: 0.29, green: 0.33, blue: 0.39))
+                Text("Photo Library")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(red: 0.29, green: 0.33, blue: 0.39))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color(red: 0.953, green: 0.957, blue: 0.965))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .onChange(of: selectedPhotoItem) { newItem in
             guard let item = newItem else { return }
@@ -423,9 +671,7 @@ private struct PhotoPickerButton: View {
                     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
                     do {
                         try data.write(to: tempURL)
-                        await MainActor.run {
-                            viewModel.sendImage(fileURL: tempURL, mimeType: "image/jpeg", caption: "")
-                        }
+                        await MainActor.run { onPicked(tempURL) }
                     } catch {
                         print("Failed to save image")
                     }
@@ -434,3 +680,38 @@ private struct PhotoPickerButton: View {
         }
     }
 }
+
+#if os(iOS)
+/// Wraps UIImagePickerController(.camera) — PhotosPicker/PHPicker can only
+/// pick existing library assets, not drive a live camera capture.
+private struct CameraPicker: UIViewControllerRepresentable {
+    let onCapture: (UIImage) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onCapture: onCapture) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onCapture: (UIImage) -> Void
+        init(onCapture: @escaping (UIImage) -> Void) { self.onCapture = onCapture }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                onCapture(image)
+            }
+            picker.dismiss(animated: true)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            picker.dismiss(animated: true)
+        }
+    }
+}
+#endif

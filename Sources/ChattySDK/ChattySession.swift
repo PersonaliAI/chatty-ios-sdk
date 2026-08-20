@@ -9,6 +9,12 @@ public enum ChattySession {
         if let existing = UserDefaults.standard.string(forKey: key) {
             return existing
         }
+        return newSession(botId: botId, hostKey: hostKey)
+    }
+
+    /// Overwrites the stored session id with a fresh one — used by the "clear chat" action.
+    public static func newSession(botId: String, hostKey: String = "app") -> String {
+        let key = "chatty_sid_\(botId)_\(hostKey)"
         let sid = "v-\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
         UserDefaults.standard.set(sid, forKey: key)
         return sid

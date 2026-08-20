@@ -13,6 +13,7 @@ public struct ChattyTheme: Decodable {
     public let teaser_message: String?
     public let avatar_icon: String?
     public let avatar_url: String?
+    public let voice_enabled: Bool?
 }
 
 public struct ChattyChatResponse: Decodable {
@@ -175,6 +176,37 @@ public final class ChattyClient {
         let (data, response) = try await session.data(for: request)
         try Self.checkStatus(response)
         return try Self.decode(data)
+    }
+
+    /// Server-side speech-to-text for the mic button. Accepts wav/mp3/ogg/aac/aiff/flac
+    /// (not webm) up to 10MB. Returns the transcribed text, or "" if speech wasn't detected.
+    public func transcribe(fileURL: URL, mimeType: String) async throws -> String {
+        let boundary = "ChattyBoundary-\(UUID().uuidString)"
+        var request = URLRequest(url: URL(string: "\(baseURL)/api/widget/transcribe")!)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        func appendField(_ name: String, _ value: String) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(value)\r\n".data(using: .utf8)!)
+        }
+        appendField("bot_id", botId)
+
+        let fileData = try Data(contentsOf: fileURL)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+
+        let (data, response) = try await session.data(for: request)
+        try Self.checkStatus(response)
+        struct TranscribeResponse: Decodable { let text: String }
+        let decoded: TranscribeResponse = try Self.decode(data)
+        return decoded.text
     }
 
     public func poll(sessionId: String, after: String) async throws -> ChattyPollResponse {

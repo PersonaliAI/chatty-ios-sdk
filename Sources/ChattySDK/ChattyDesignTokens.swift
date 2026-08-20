@@ -123,6 +123,54 @@ public func chattyNormalizeWidgetStyle(_ raw: String?) -> String {
     return chattyLegacyStyleMap[id] ?? "minimal"
 }
 
+/// The 2nd colon-segment of `widget_style`, e.g. `"minimal:#fff:bubble"` -> `"#fff"` —
+/// overrides the header/bubble avatar circle's background when a real logo/avatar image
+/// isn't shown.
+public func chattyLogoBgColor(_ raw: String?) -> Color? {
+    guard let raw else { return nil }
+    let parts = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+    guard parts.count >= 2, !parts[1].isEmpty else { return nil }
+    return Color(hex: parts[1])
+}
+
+/// The 3rd colon-segment of `widget_style` controls the launcher button's corner shape:
+/// `square` -> 0pt corners, `rounded` -> 12pt corners, `bubble` -> an asymmetric "speech
+/// tail" corner, anything else (including absent) -> a full circle, matching widget.js.
+public struct ChattyLauncherShape: Shape {
+    let raw: String?
+    let position: ChattyPosition
+
+    public func path(in rect: CGRect) -> Path {
+        let parts = raw?.split(separator: ":", omittingEmptySubsequences: false).map(String.init) ?? []
+        let shapeId = parts.count >= 3 ? parts[2] : nil
+        switch shapeId {
+        case "square":
+            return Path(rect)
+        case "rounded":
+            return Path(RoundedRectangle(cornerRadius: 12).path(in: rect).cgPath)
+        case "bubble":
+            let isTrailing = position == .bottomTrailing
+            let tl: CGFloat = 30, tr: CGFloat = 30
+            let br: CGFloat = isTrailing ? 30 : 4
+            let bl: CGFloat = isTrailing ? 4 : 30
+            var path = Path()
+            path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
+            path.addArc(center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr), radius: tr, startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
+            path.addArc(center: CGPoint(x: rect.maxX - br, y: rect.maxY - br), radius: br, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+            path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
+            path.addArc(center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl), radius: bl, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
+            path.addArc(center: CGPoint(x: rect.minX + tl, y: rect.minY + tl), radius: tl, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+            path.closeSubpath()
+            return path
+        default:
+            return Path(ellipseIn: rect)
+        }
+    }
+}
+
 /// Message bubble shape with the corner nearest the avatar squared off,
 /// matching web's `.rounded-tl-none` (bot) / `.rounded-tr-none` (user) — the
 /// "speech tail" corner treatment used by every design.

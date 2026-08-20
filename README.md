@@ -181,6 +181,17 @@ embedded full-screen chat against a live demo bot.
 - iOS 15+ (macOS 13+ for the library target)
 - Swift 5.7+, SwiftUI
 - Uses `async`/`await`, `@StateObject` — no third-party dependencies
+- **Add these keys to your app's `Info.plist`** to use the composer's mic and camera
+  buttons (a library target can't inject `Info.plist` entries — this has to be in the
+  consuming app):
+  ```xml
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Used to record voice messages in chat.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Used to attach photos in chat.</string>
+  ```
+  Without these, tapping the mic/camera silently does nothing (iOS kills the process on
+  a missing usage string rather than showing an error).
 
 ## Contributing
 

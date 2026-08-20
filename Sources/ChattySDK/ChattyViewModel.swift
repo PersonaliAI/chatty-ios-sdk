@@ -187,6 +187,31 @@ public final class ChattyViewModel: ObservableObject {
         }
     }
 
+    /// Clears the local conversation and starts a fresh session — the native equivalent
+    /// of web's header "clear chat" button.
+    public func clearChat() {
+        sessionId = ChattySession.newSession(botId: botId, hostKey: hostKey)
+        if let welcome = theme?.welcome_message, !welcome.isEmpty {
+            messages = [ChattyMessage(id: "welcome", role: .assistant, text: welcome)]
+        } else {
+            messages = []
+        }
+        aiPaused = false
+        error = nil
+        saveMessages()
+        lastPollAt = ISO8601DateFormatter().string(from: Date())
+    }
+
+    /// Uploads a recorded voice note for server-side transcription (mic button). Result is
+    /// delivered via `onResult` rather than a thrown error since a failed transcription
+    /// shouldn't surface as a chat error banner.
+    public func transcribeVoiceNote(fileURL: URL, mimeType: String, onResult: @escaping (String?) -> Void) {
+        Task {
+            let text = try? await client.transcribe(fileURL: fileURL, mimeType: mimeType)
+            onResult(text?.isEmpty == false ? text : nil)
+        }
+    }
+
     public func sendImage(fileURL: URL, mimeType: String, caption: String = "") {
         guard let sid = sessionId else { return }
         messages.append(ChattyMessage(role: .user, text: caption, fileURL: fileURL))

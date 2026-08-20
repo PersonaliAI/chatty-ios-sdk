@@ -19,6 +19,7 @@ public struct ChattyLauncher: View {
     @State private var open = false
     @State private var unread = 0
     @State private var designId = "minimal"
+    @State private var rawWidgetStyle: String?
 
     public init(
         botId: String,
@@ -44,12 +45,13 @@ public struct ChattyLauncher: View {
             HStack {
                 if position == .bottomTrailing { Spacer() }
                 ZStack(alignment: .topTrailing) {
+                    let shape = ChattyLauncherShape(raw: rawWidgetStyle, position: position)
                     Button(action: { open = true; unread = 0 }) {
                         Text("💬")
                             .font(.system(size: 24))
                             .frame(width: 60, height: 60)
                             .background(isGradient ? AnyView(gradientBackground) : AnyView(resolvedColor))
-                            .clipShape(Circle())
+                            .clipShape(shape)
                             .shadow(color: tokens.launcherShadow, radius: 10, y: 4)
                     }
                     if unread > 0 {
@@ -86,6 +88,7 @@ public struct ChattyLauncher: View {
         do {
             let theme = try await ChattyClient(botId: botId, baseURL: baseURL, host: host).getTheme()
             designId = chattyNormalizeWidgetStyle(theme.widget_style)
+            rawWidgetStyle = theme.widget_style
         } catch {
             // keep the fallback design — a failed theme fetch shouldn't block the button from rendering
         }
