@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = "ChattySDK"
-  s.version          = "1.0.3"
+  s.version          = "1.0.4"
   s.summary          = "Official iOS SDK for Chatty AI chatbots — native SwiftUI, no WebView."
   s.description      = <<-DESC
     Native SwiftUI chat UI for Chatty. Talks directly to the same
