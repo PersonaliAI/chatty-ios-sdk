@@ -123,7 +123,9 @@ public init(
     baseURL: String = chattyDefaultBaseURL,
     host: String? = nil,
     position: ChattyPosition = .bottomTrailing,
-    color: Color? = nil
+    color: Color? = nil,
+    onVoiceCallPress: (() -> Void)? = nil,
+    onNotificationBellPress: (() -> Void)? = nil
 )
 ```
 
@@ -134,6 +136,8 @@ public init(
 | `host` | Advisory only — sent to the backend but not used for access control. See [Notes](#notes). |
 | `position` | `.bottomLeading` or `.bottomTrailing`. Default `.bottomTrailing`. |
 | `color` | Overrides the launcher color. Defaults to the active design's accent color. |
+| `onVoiceCallPress` | Forwarded to `ChattyChatView`'s header voice-call button. See [Notes](#notes). |
+| `onNotificationBellPress` | Forwarded to `ChattyChatView`'s header notification bell. See [Notes](#notes). |
 
 ### `ChattyChatView`
 
@@ -142,7 +146,10 @@ public init(
     botId: String,
     baseURL: String = chattyDefaultBaseURL,
     host: String? = nil,
-    onMessage: ((ChattyMessage) -> Void)? = nil
+    onMessage: ((ChattyMessage) -> Void)? = nil,
+    onVoiceCallPress: (() -> Void)? = nil,
+    onNotificationBellPress: (() -> Void)? = nil,
+    onClose: (() -> Void)? = nil
 )
 ```
 
@@ -152,6 +159,9 @@ public init(
 | `baseURL` | Chatty backend base URL. Defaults to the production API. |
 | `host` | Advisory only — sent to the backend but not used for access control. See [Notes](#notes). |
 | `onMessage` | Called for every inbound message — useful for unread badges or analytics. |
+| `onVoiceCallPress` | Header voice-call button tapped. Only shown when the bot's dashboard has voice enabled. See [Notes](#notes). |
+| `onNotificationBellPress` | Header notification-bell button tapped, after the OS permission prompt resolves. See [Notes](#notes). |
+| `onClose` | Renders a close (✕) button in the header when set. `ChattyLauncher` passes this for you. |
 
 ### Notes
 
@@ -162,6 +172,15 @@ public init(
   token the way a browser's `Referer` allows) gets throttled to 5 msgs/120s. The `host` param
   this SDK sends is advisory only and isn't used for access control. If your bot is
   mobile-primary, leave `allowed_domains` empty to get the normal 30/60s tier instead.
+- **Notification bell.** Tapping it requests the OS notification permission and then calls
+  `onNotificationBellPress`. That's as far as this SDK goes — actually *delivering* a push when
+  a reply arrives while the app is backgrounded needs APNs (or a wrapper like OneSignal) wired
+  up at the app level: register the device token, send it to your backend, store it against the
+  session/user, and have the backend call APNs when a message lands for a session that isn't
+  actively polling. None of that exists yet — it's backend work in `chatty-backend`.
+- **Voice-call button.** Only shown when the bot's dashboard has voice enabled, and only fires
+  `onVoiceCallPress` — this SDK doesn't bundle a voice-call implementation (a separate LiveKit
+  integration, out of scope here).
 - Lead capture and meeting booking happen conversationally (the assistant decides to ask/act) —
   there's no separate REST call to trigger them from the SDK.
 - Polling for human-agent takeover messages runs every 4s while `ChattyChatView` is active,

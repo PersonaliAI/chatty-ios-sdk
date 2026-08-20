@@ -15,6 +15,8 @@ public struct ChattyLauncher: View {
     let host: String?
     let position: ChattyPosition
     let colorOverride: Color?
+    let onVoiceCallPress: (() -> Void)?
+    let onNotificationBellPress: (() -> Void)?
 
     @State private var open = false
     @State private var unread = 0
@@ -26,13 +28,17 @@ public struct ChattyLauncher: View {
         baseURL: String = chattyDefaultBaseURL,
         host: String? = nil,
         position: ChattyPosition = .bottomTrailing,
-        color: Color? = nil
+        color: Color? = nil,
+        onVoiceCallPress: (() -> Void)? = nil,
+        onNotificationBellPress: (() -> Void)? = nil
     ) {
         self.botId = botId
         self.baseURL = baseURL
         self.host = host
         self.position = position
         self.colorOverride = color
+        self.onVoiceCallPress = onVoiceCallPress
+        self.onNotificationBellPress = onNotificationBellPress
     }
 
     private var tokens: ChattyDesignTokens { chattyDesignTokens[designId] ?? chattyDesignTokens["minimal"]! }
@@ -70,9 +76,15 @@ public struct ChattyLauncher: View {
             .padding(20)
         }
         .sheet(isPresented: $open) {
-            ChattyChatView(botId: botId, baseURL: baseURL, host: host) { _ in
-                if !open { unread += 1 }
-            }
+            ChattyChatView(
+                botId: botId,
+                baseURL: baseURL,
+                host: host,
+                onMessage: { _ in if !open { unread += 1 } },
+                onVoiceCallPress: onVoiceCallPress,
+                onNotificationBellPress: onNotificationBellPress,
+                onClose: { open = false }
+            )
         }
         .task { await loadDesign() }
     }

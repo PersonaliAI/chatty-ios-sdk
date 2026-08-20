@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UserNotifications
 #if os(iOS)
 import AVFoundation
 import UIKit
@@ -23,10 +24,15 @@ public struct ChattyChatView: View {
     /// dashboard has voice enabled). This SDK doesn't bundle a voice-call implementation
     /// itself (that's a separate LiveKit integration) — wire this up if your app has one.
     public var onVoiceCallPress: (() -> Void)?
-    /// Called when the header's notification-bell button is tapped. Native apps manage
-    /// push notifications through their own infrastructure (FCM/APNs), so this SDK
-    /// doesn't subscribe to anything itself — wire this up to your app's own opt-in flow.
+    /// Called when the header's notification-bell button is tapped, after the OS
+    /// notification-permission prompt has been resolved either way. Native apps still need
+    /// their own push infrastructure (FCM/APNs) to actually *deliver* a notification when a
+    /// reply arrives while backgrounded — this SDK only handles the local permission ask.
     public var onNotificationBellPress: (() -> Void)?
+    /// Renders a close (✕) button in the header when provided — pass this instead of relying
+    /// only on swipe-to-dismiss when embedding `ChattyChatView` in your own sheet/dialog.
+    /// `ChattyLauncher` already does this for you.
+    public var onClose: (() -> Void)?
 
     public init(
         botId: String,
@@ -34,13 +40,15 @@ public struct ChattyChatView: View {
         host: String? = nil,
         onMessage: ((ChattyMessage) -> Void)? = nil,
         onVoiceCallPress: (() -> Void)? = nil,
-        onNotificationBellPress: (() -> Void)? = nil
+        onNotificationBellPress: (() -> Void)? = nil,
+        onClose: (() -> Void)? = nil
     ) {
         let vm = ChattyViewModel(botId: botId, baseURL: baseURL, host: host)
         vm.onMessage = onMessage
         _viewModel = StateObject(wrappedValue: vm)
         self.onVoiceCallPress = onVoiceCallPress
         self.onNotificationBellPress = onNotificationBellPress
+        self.onClose = onClose
     }
 
     /// Falls back to primary_color-on-white when the bot uses an unrecognized
@@ -103,22 +111,27 @@ public struct ChattyChatView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(viewModel.theme?.name ?? "Chatty Assistant")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(t.headerText)
                     .lineLimit(1)
                 HStack(spacing: 4) {
                     ChattyPulsingDot(color: Color(red: 0.133, green: 0.773, blue: 0.369))
                     Text("Online · replies instantly")
-                        .font(.system(size: 9))
+                        .font(.system(size: 10))
                         .foregroundColor(t.headerText.opacity(0.7))
                 }
             }
             Spacer()
-            if viewModel.theme?.voice_enabled == true {
-                headerActionButton(systemName: "phone.fill", tint: t.headerText) { onVoiceCallPress?() }
+            HStack(spacing: 2) {
+                if viewModel.theme?.voice_enabled == true {
+                    headerActionButton(systemName: "phone.fill", tint: t.headerText) { onVoiceCallPress?() }
+                }
+                headerActionButton(systemName: "bell.fill", tint: t.headerText) { onBellPress() }
+                headerActionButton(systemName: "arrow.counterclockwise", tint: t.headerText) { viewModel.clearChat() }
+                if let onClose {
+                    headerActionButton(systemName: "xmark", tint: t.headerText, action: onClose)
+                }
             }
-            headerActionButton(systemName: "bell.fill", tint: t.headerText) { onNotificationBellPress?() }
-            headerActionButton(systemName: "arrow.counterclockwise", tint: t.headerText) { viewModel.clearChat() }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -139,9 +152,18 @@ public struct ChattyChatView: View {
     private func headerActionButton(systemName: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 14))
+                .font(.system(size: 16))
                 .foregroundColor(tint)
-                .frame(width: 28, height: 28)
+                .frame(width: 32, height: 32)
+        }
+    }
+
+    // Requests the OS notification permission before invoking the callback — same shape as
+    // Android's POST_NOTIFICATIONS ask. Actually delivering a push still needs APNs/FCM/etc.
+    // wired up at the app level (see the README).
+    private func onBellPress() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in
+            DispatchQueue.main.async { onNotificationBellPress?() }
         }
     }
 
@@ -216,11 +238,11 @@ public struct ChattyChatView: View {
                     if !message.text.isEmpty {
                         if isUser {
                             Text(message.text)
-                                .font(.system(size: 12))
+                                .font(.system(size: 13))
                                 .foregroundColor(t.userBubbleText)
                         } else {
                             parsedMessage(message.text)
-                                .font(.system(size: 12))
+                                .font(.system(size: 13))
                                 .foregroundColor(t.botBubbleText)
                                 .tint(t.userBubbleBg)
                         }
@@ -257,7 +279,7 @@ public struct ChattyChatView: View {
                     ForEach(list, id: \.self) { starter in
                         Button(action: { viewModel.sendText(starter) }) {
                             Text(starter)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 13, weight: .medium))
                                 .lineLimit(2)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
@@ -385,10 +407,10 @@ public struct ChattyChatView: View {
         if #available(iOS 16.0, *) {
             TextField("Type a message…", text: $input, axis: .vertical)
                 .lineLimit(1...4)
-                .font(.system(size: 12))
+                .font(.system(size: 13))
         } else {
             TextField("Type a message…", text: $input)
-                .font(.system(size: 12))
+                .font(.system(size: 13))
         }
     }
 
@@ -402,7 +424,13 @@ public struct ChattyChatView: View {
                     .onTapGesture { input += emoji }
             }
         }
+        .padding(6)
         .frame(height: 160)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(red: 0.9, green: 0.91, blue: 0.92)))
+        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
+        .padding(.bottom, 8)
     }
 
     private func attachMenu(t: ChattyDesignTokens) -> some View {
@@ -427,7 +455,12 @@ public struct ChattyChatView: View {
                 }
             }
         }
-        .padding(.vertical, 8)
+        .padding(10)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(red: 0.9, green: 0.91, blue: 0.92)))
+        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
+        .padding(.bottom, 8)
     }
 
     private func attachMenuOption(systemName: String, label: String, action: @escaping () -> Void) -> some View {
@@ -455,12 +488,12 @@ public struct ChattyChatView: View {
             HStack(spacing: 8) {
                 ChattyPulsingDot(color: Color(red: 0.937, green: 0.267, blue: 0.267), size: 8)
                 Text(String(format: "Recording… %d:%02d", recordingSeconds / 60, recordingSeconds % 60))
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundColor(Color(red: 0.42, green: 0.45, blue: 0.5))
             }
             Spacer()
             Button("Stop", action: stopRecordingAndTranscribe)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
         }
         .padding(.vertical, 6)
     }
@@ -614,8 +647,8 @@ private struct ChattySendButton: View {
         case "label":
             Button(action: action) {
                 HStack(spacing: 6) {
-                    Image(systemName: "paperplane.fill").font(.system(size: 12))
-                    Text("Send").font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "paperplane.fill").font(.system(size: 13))
+                    Text("Send").font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundColor(textColor)
                 .padding(.horizontal, 14)

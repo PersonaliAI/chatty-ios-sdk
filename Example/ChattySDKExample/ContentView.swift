@@ -7,6 +7,18 @@ private let demoBotID = "c8fa19c8-dd25-43a3-9c55-e8099e6f532e"
 
 struct ContentView: View {
     @State private var showFullScreen = false
+    @State private var alertMessage: String?
+
+    // The SDK's voice-call/notification-bell buttons only fire a callback — it doesn't bundle
+    // a call implementation or push registration itself (see ChattyChatView's doc comments).
+    // These alerts just prove the buttons are wired up; a real app would launch its own
+    // LiveKit call screen / notification opt-in flow here instead.
+    private var onVoiceCallPress: () -> Void {
+        { alertMessage = "Voice call tapped — wire up your own call UI here" }
+    }
+    private var onNotificationBellPress: () -> Void {
+        { alertMessage = "Notification permission resolved — register for push here" }
+    }
 
     var body: some View {
         ZStack {
@@ -20,7 +32,11 @@ struct ContentView: View {
                         Color.clear.frame(width: 44)
                     }
                     .padding()
-                    ChattyChatView(botId: demoBotID)
+                    ChattyChatView(
+                        botId: demoBotID,
+                        onVoiceCallPress: onVoiceCallPress,
+                        onNotificationBellPress: onNotificationBellPress
+                    )
                 }
             } else {
                 VStack(alignment: .leading, spacing: 16) {
@@ -39,9 +55,16 @@ struct ContentView: View {
                     // Floating launcher — its default color follows whatever
                     // design is selected for this bot in the dashboard; no
                     // manual color config needed here.
-                    ChattyLauncher(botId: demoBotID)
+                    ChattyLauncher(
+                        botId: demoBotID,
+                        onVoiceCallPress: onVoiceCallPress,
+                        onNotificationBellPress: onNotificationBellPress
+                    )
                 )
             }
+        }
+        .alert(alertMessage ?? "", isPresented: Binding(get: { alertMessage != nil }, set: { if !$0 { alertMessage = nil } })) {
+            Button("OK", role: .cancel) {}
         }
     }
 }
