@@ -70,7 +70,19 @@ public final class ChattyClient {
     private let host: String?
     private let session: URLSession
 
-    public init(botId: String, baseURL: String = chattyDefaultBaseURL, host: String? = nil, session: URLSession = .shared) {
+    // .shared's default timeoutIntervalForRequest (60s) can be too tight for this API — a
+    // chat reply can involve RAG retrieval, a scheduling tool-calling round trip (availability
+    // check, booking, notification side effects), and a Gemini model-fallback retry chain on
+    // the backend before the first byte comes back. Widened explicitly so this doesn't depend
+    // on whatever the platform default happens to be.
+    private static let defaultSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForResource = 180
+        return URLSession(configuration: config)
+    }()
+
+    public init(botId: String, baseURL: String = chattyDefaultBaseURL, host: String? = nil, session: URLSession = ChattyClient.defaultSession) {
         self.botId = botId
         self.baseURL = baseURL
         self.host = host
