@@ -75,7 +75,10 @@ public final class ChattyClient {
     // check, booking, notification side effects), and a Gemini model-fallback retry chain on
     // the backend before the first byte comes back. Widened explicitly so this doesn't depend
     // on whatever the platform default happens to be.
-    private static let defaultSession: URLSession = {
+    // Must be at least as visible as the public init's default argument that references it —
+    // Swift resolves default-value expressions at the call site, including calls from other
+    // modules, so `private`/`internal` here fails to build for anyone importing this package.
+    public static let defaultSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 120
         config.timeoutIntervalForResource = 180
