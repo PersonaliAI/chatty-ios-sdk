@@ -49,7 +49,11 @@ public final class ChattyViewModel: ObservableObject {
         host: String? = nil,
         hostKey: String = "app",
         pollIntervalSeconds: Double = 4.0,
-        visitorTimezone: String = "UTC"
+        // Real IANA zone (e.g. "Asia/Colombo"), not a literal "UTC" default — the
+        // assistant uses this to skip asking the visitor for their timezone (see
+        // widget_brain.py's scheduling prompt), same as the web widget already
+        // does via Intl.DateTimeFormat().resolvedOptions().timeZone.
+        visitorTimezone: String = TimeZone.current.identifier
     ) {
         self.botId = botId
         self.client = ChattyClient(botId: botId, baseURL: baseURL, host: host)
