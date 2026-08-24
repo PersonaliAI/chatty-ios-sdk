@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "ChattySDK", type: .dynamic, targets: ["ChattySDK"])
     ],
     targets: [
-        .target(name: "ChattySDK", path: "Sources/ChattySDK")
+        .target(name: "ChattySDK", path: "Sources/ChattySDK"),
+        .testTarget(name: "ChattySDKTests", dependencies: ["ChattySDK"], path: "Tests/ChattySDKTests")
     ]
 )
