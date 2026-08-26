@@ -141,18 +141,25 @@ public final class ChattyViewModel: ObservableObject {
         error = nil
         Task {
             do {
-                let res = try await client.sendMessage(sessionId: sid, text: trimmed, visitorTimezone: visitorTimezone)
-                self.aiPaused = res.ai_paused ?? false
-                if !(res.ai_paused ?? false), !res.reply.isEmpty {
-                    let reply = ChattyMessage(role: .assistant, text: res.reply)
-                    self.messages.append(reply)
-                    self.saveMessages()
-                    self.onMessage?(reply)
-                }
+                try await sendViaNonStreaming(trimmed, sessionId: sid)
             } catch {
                 self.error = error.localizedDescription
             }
             self.sending = false
+        }
+    }
+
+    /// The non-streaming send + assistant-reply-append, shared by sendText's
+    /// pre-iOS-15 path and sendTextStream's failure fallback below. Assumes
+    /// the user message was already appended by the caller.
+    private func sendViaNonStreaming(_ trimmed: String, sessionId sid: String) async throws {
+        let res = try await client.sendMessage(sessionId: sid, text: trimmed, visitorTimezone: visitorTimezone)
+        self.aiPaused = res.ai_paused ?? false
+        if !(res.ai_paused ?? false), !res.reply.isEmpty {
+            let reply = ChattyMessage(role: .assistant, text: res.reply)
+            self.messages.append(reply)
+            self.saveMessages()
+            self.onMessage?(reply)
         }
     }
 
@@ -165,14 +172,16 @@ public final class ChattyViewModel: ObservableObject {
         sending = true
         error = nil
         Task {
+            let replyId = UUID().uuidString
+            var replyStarted = false
             do {
                 let stream = try await client.sendMessageStream(sessionId: sid, text: trimmed, visitorTimezone: visitorTimezone)
-                let replyId = UUID().uuidString
                 var currentReplyText = ""
                 let initialReply = ChattyMessage(id: replyId, role: .assistant, text: currentReplyText)
                 self.messages.append(initialReply)
+                replyStarted = true
                 self.saveMessages()
-                
+
                 for try await token in stream {
                     currentReplyText += token
                     if let index = self.messages.firstIndex(where: { $0.id == replyId }) {
@@ -184,8 +193,20 @@ public final class ChattyViewModel: ObservableObject {
                     self.onMessage?(finalMsg)
                 }
             } catch {
-                self.error = error.localizedDescription
-                // fallback to regular sendText if stream fails? Or just show error.
+                // Drop this attempt's placeholder/partial bubble (by id, so a
+                // reply that already received some tokens before failing
+                // mid-stream doesn't survive alongside the fallback's full
+                // reply below) and fall back to a non-streaming send rather
+                // than leaving a permanently blank/incomplete bubble.
+                if replyStarted {
+                    self.messages.removeAll { $0.id == replyId }
+                    self.saveMessages()
+                }
+                do {
+                    try await sendViaNonStreaming(trimmed, sessionId: sid)
+                } catch {
+                    self.error = error.localizedDescription
+                }
             }
             self.sending = false
         }
