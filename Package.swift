@@ -29,6 +29,17 @@ let package = Package(
         // swift-tools-version:5.9 (Xcode 15.0+). Bumping past 2.13.x needs
         // bumping the pinned Xcode version in ci.yml/release.yml first.
         .package(url: "https://github.com/livekit/client-sdk-swift.git", .upToNextMinor(from: "2.13.0")),
+        // LiveKit's own Package.swift depends on this (pinned the same way:
+        // `from: "1.31.0"`) but only re-exports it as an *implicit* transitive
+        // module for plain `swift build`. Xcode's build system — used by
+        // `xcodebuild archive`, which is how release.yml actually builds this
+        // package — requires every module a target uses (even transitively
+        // through another package's binary/dynamic target) to be an explicit
+        // product dependency, or archiving fails with "Missing package
+        // product 'SwiftProtobuf'" even though `swift build` succeeds clean.
+        // Confirmed via a real CI archive failure the first time
+        // ChattySDKVoice was added.
+        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.31.0"),
     ],
     targets: [
         .target(name: "ChattySDK", path: "Sources/ChattySDK"),
@@ -37,6 +48,7 @@ let package = Package(
             dependencies: [
                 "ChattySDK",
                 .product(name: "LiveKit", package: "client-sdk-swift"),
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
             ],
             path: "Sources/ChattySDKVoice"
         ),
