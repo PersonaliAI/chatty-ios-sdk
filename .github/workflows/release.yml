@@ -89,6 +89,19 @@ jobs:
       # comment on why it's split out), so it needs its own device +
       # simulator archive and XCFramework, not just riding along with
       # ChattySDK's.
+      #
+      # No BUILD_LIBRARY_FOR_DISTRIBUTION here (unlike ChattySDK above):
+      # ChattySDKVoice pulls in LiveKit's LiveKitUniFFI target, which wraps a
+      # precompiled binary xcframework (RustLiveKitUniFFI) rather than Swift
+      # source. Xcode's library-evolution module-interface verification can't
+      # see through that binary target and fails with "no such module
+      # 'RustLiveKitUniFFI'" / "failed to verify module interface of
+      # 'LiveKitUniFFI'" — a real Xcode/SPM limitation with binary targets
+      # under BUILD_LIBRARY_FOR_DISTRIBUTION, confirmed via CI, not something
+      # fixable in this package's own code. Consumers of ChattySDKVoice.
+      # xcframework should build with the same major Xcode/Swift version this
+      # release used (see ci.yml's pinned Xcode 15.4) rather than relying on
+      # forward ABI stability.
       - name: Archive ChattySDKVoice for iOS device
         run: |
           xcodebuild archive \
@@ -98,7 +111,6 @@ jobs:
             -derivedDataPath build/DerivedData-iOS-Voice \
             -clonedSourcePackagesDirPath build/SourcePackages \
             SKIP_INSTALL=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             INSTALL_PATH=/Library/Frameworks
 
       - name: Archive ChattySDKVoice for iOS Simulator
@@ -110,7 +122,6 @@ jobs:
             -derivedDataPath build/DerivedData-iOS-Simulator-Voice \
             -clonedSourcePackagesDirPath build/SourcePackages \
             SKIP_INSTALL=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             INSTALL_PATH=/Library/Frameworks
 
       - name: Locate built ChattySDKVoice frameworks
