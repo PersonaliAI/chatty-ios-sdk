@@ -1,17 +1,19 @@
-// NOTE: written without the ability to run Xcode, Swift Package Manager
-// dependency resolution, or a device/simulator in this environment. Every
-// LiveKit Swift SDK type/method referenced here (livekit/client-sdk-swift
-// 2.16.0) WAS verified by cloning the real tagged source and reading it
-// directly: Room.connect/disconnect, Room.localParticipant, the RoomDelegate
-// protocol's exact method signatures (didUpdateConnectionState,
-// didDisconnectWithError, didUpdateSpeakingParticipants,
-// didReceiveTranscriptionSegments), LocalParticipant.setMicrophone,
-// Participant.identity/audioLevel, TranscriptionSegment's fields (id/text/
-// isFinal — note isFinal, not "final" as on Android/RN), ConnectionState's
-// cases, and AudioManager.shared.isSpeakerOutputPreferred. What's NOT
-// verified: that this file actually compiles as a whole (no Swift toolchain
-// here) or that a real call works end-to-end on device. Build and test
-// before releasing.
+// NOTE: written without the ability to run Xcode or a device/simulator in
+// this environment. Every LiveKit Swift SDK type/method referenced here was
+// verified by cloning the real tagged source (both 2.16.0 and 2.13.0, the
+// version this package is actually pinned to — see Package.swift) and
+// reading it directly: Room.connect/disconnect, Room.localParticipant, the
+// RoomDelegate protocol's exact method signatures, LocalParticipant.
+// setMicrophone, Participant.identity/audioLevel, TranscriptionSegment's
+// fields (isFinal, not "final" as on Android/RN), ConnectionState's cases,
+// AudioManager.shared.isSpeakerOutputPreferred. GitHub Actions CI (real
+// Xcode, runs on every push) did catch one real error this static reading
+// missed: Timer.scheduledTimer's closure capturing [weak self] then reading
+// it inside a nested Task caused a Swift concurrency "captured var in
+// concurrently-executing code" error — replaced with a plain Task-based
+// loop, natural for an already-@MainActor class. What's still NOT verified:
+// that a real call works end-to-end on device (mic permission, actual
+// audio, transcript rendering). Test that before releasing.
 import SwiftUI
 import Foundation
 #if os(iOS)
@@ -41,7 +43,7 @@ private final class ChattyVoiceCallModel: NSObject, ObservableObject, RoomDelega
     @Published var duration = 0
 
     private var room: Room?
-    private var durationTimer: Timer?
+    private var durationTask: Task<Void, Never>?
 
     func start(client: ChattyClient, sessionId: String, visitorTimezone: String) async {
         do {
@@ -63,7 +65,7 @@ private final class ChattyVoiceCallModel: NSObject, ObservableObject, RoomDelega
                 return
             }
             status = .connected
-            startDurationTimer()
+            startDurationCounter()
         } catch {
             status = .error((error as? LocalizedError)?.errorDescription ?? "Couldn't start the call, please try again.")
         }
@@ -73,22 +75,33 @@ private final class ChattyVoiceCallModel: NSObject, ObservableObject, RoomDelega
         guard let room else { return }
         let next = !muted
         muted = next
-        Task { try? await room.localParticipant.setMicrophone(enabled: !next) }
+        Task { _ = try? await room.localParticipant.setMicrophone(enabled: !next) }
     }
 
     func hangup() async {
-        durationTimer?.invalidate()
+        durationTask?.cancel()
         if let room {
-            try? await room.localParticipant.setMicrophone(enabled: false)
+            _ = try? await room.localParticipant.setMicrophone(enabled: false)
             await room.disconnect()
         }
         room = nil
     }
 
-    private func startDurationTimer() {
-        durationTimer?.invalidate()
-        durationTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.duration += 1 }
+    // A Task-based loop instead of Timer.scheduledTimer(_:) — this class is
+    // already @MainActor, so a plain `while` loop here runs on the main
+    // actor with no capture-across-concurrency-domains concerns the way a
+    // Timer's own (non-actor-isolated) closure had. Cancelling the Task
+    // (hangup, or deinit via the didSet below) stops the loop via
+    // Task.isCancelled; Task.sleep itself throws CancellationError, which
+    // the try? swallows into a clean exit.
+    private func startDurationCounter() {
+        durationTask?.cancel()
+        durationTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { break }
+                self?.duration += 1
+            }
         }
     }
 
@@ -100,7 +113,7 @@ private final class ChattyVoiceCallModel: NSObject, ObservableObject, RoomDelega
     }
 
     func room(_ room: Room, didDisconnectWithError error: LiveKitError?) {
-        durationTimer?.invalidate()
+        durationTask?.cancel()
         if case .error = status { return }
         status = .ended
     }
@@ -152,10 +165,10 @@ private final class ChattyVoiceCallModel: NSObject, ObservableObject, RoomDelega
 /// }
 /// ```
 ///
-/// Requires the LiveKit Swift SDK as a separate SPM dependency this package
-/// does NOT declare itself (`https://github.com/livekit/client-sdk-swift`,
-/// `from: "2.16.0"`) — only apps that render this view need it. Add
-/// `NSMicrophoneUsageDescription` to your app's Info.plist.
+/// Add `NSMicrophoneUsageDescription` to your app's Info.plist. LiveKit's
+/// Swift SDK is pulled in automatically as this target's own dependency
+/// (see Package.swift for why it's pinned below 2.14.0) once you add the
+/// ChattySDKVoice product — no separate dependency to add yourself.
 public struct ChattyVoiceCallView: View {
     @StateObject private var model = ChattyVoiceCallModel()
     private let client: ChattyClient
