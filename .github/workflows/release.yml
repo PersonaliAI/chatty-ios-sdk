@@ -69,8 +69,60 @@ jobs:
       - name: Zip XCFramework
         run: cd build && zip -r ChattySDK.xcframework.zip ChattySDK.xcframework
 
+      # Mirrors the ChattySDK archive steps above for the second product —
+      # ChattySDKVoice is its own scheme/target (see Package.swift's own
+      # comment on why it's split out), so it needs its own device +
+      # simulator archive and XCFramework, not just riding along with
+      # ChattySDK's.
+      - name: Archive ChattySDKVoice for iOS device
+        run: |
+          xcodebuild archive \
+            -scheme ChattySDKVoice \
+            -destination "generic/platform=iOS" \
+            -archivePath build/ChattySDKVoice-iOS \
+            -derivedDataPath build/DerivedData-iOS-Voice \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            INSTALL_PATH=/Library/Frameworks
+
+      - name: Archive ChattySDKVoice for iOS Simulator
+        run: |
+          xcodebuild archive \
+            -scheme ChattySDKVoice \
+            -destination "generic/platform=iOS Simulator" \
+            -archivePath build/ChattySDKVoice-iOS-Simulator \
+            -derivedDataPath build/DerivedData-iOS-Simulator-Voice \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            INSTALL_PATH=/Library/Frameworks
+
+      - name: Locate built ChattySDKVoice frameworks
+        id: locate-voice
+        run: |
+          device_fw=$(find build -path "*ChattySDKVoice-iOS.xcarchive*ChattySDKVoice.framework" -type d | head -1)
+          sim_fw=$(find build -path "*ChattySDKVoice-iOS-Simulator.xcarchive*ChattySDKVoice.framework" -type d | head -1)
+          if [ -z "$device_fw" ] || [ -z "$sim_fw" ]; then
+            echo "::error::Could not locate ChattySDKVoice.framework in one or both archives"
+            find build -maxdepth 8 \( -type d -o -name "*.framework" \)
+            exit 1
+          fi
+          echo "device_fw=$device_fw" >> "$GITHUB_OUTPUT"
+          echo "sim_fw=$sim_fw" >> "$GITHUB_OUTPUT"
+
+      - name: Create ChattySDKVoice XCFramework
+        run: |
+          xcodebuild -create-xcframework \
+            -framework "${{ steps.locate-voice.outputs.device_fw }}" \
+            -framework "${{ steps.locate-voice.outputs.sim_fw }}" \
+            -output build/ChattySDKVoice.xcframework
+
+      - name: Zip ChattySDKVoice XCFramework
+        run: cd build && zip -r ChattySDKVoice.xcframework.zip ChattySDKVoice.xcframework
+
       # CocoaPods Trunk publish requires COCOAPODS_TRUNK_TOKEN (from `pod
       # trunk register`) as a repo secret — skipped automatically until set.
+      # ChattySDKVoice has no podspec yet (CocoaPods distribution for it is
+      # out of scope here) — only ChattySDK publishes to CocoaPods Trunk.
       - name: Publish to CocoaPods Trunk
         if: ${{ vars.COCOAPODS_ENABLED == 'true' }}
         env:
@@ -83,7 +135,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: build/ChattySDK.xcframework.zip
+          files: |
+            build/ChattySDK.xcframework.zip
+            build/ChattySDKVoice.xcframework.zip
 
   example-app-simulator:
     name: Build example app (Simulator)

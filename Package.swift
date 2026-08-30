@@ -20,7 +20,15 @@ let package = Package(
         .library(name: "ChattySDKVoice", type: .dynamic, targets: ["ChattySDKVoice"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/livekit/client-sdk-swift.git", from: "2.16.0"),
+        // Pinned below 2.14.0, not `from: "2.16.0"` — every release from
+        // 2.14.0 on declares swift-tools-version:6.1, which needs Xcode
+        // 16.3+ to even resolve; this repo's CI/release workflows pin Xcode
+        // 15.4 (confirmed the hard way: CI failed with "contains
+        // incompatible tools version (6.1.0)" the first time this dependency
+        // was added at 2.16.0). 2.13.0 is the last release still on
+        // swift-tools-version:5.9 (Xcode 15.0+). Bumping past 2.13.x needs
+        // bumping the pinned Xcode version in ci.yml/release.yml first.
+        .package(url: "https://github.com/livekit/client-sdk-swift.git", .upToNextMinor(from: "2.13.0")),
     ],
     targets: [
         .target(name: "ChattySDK", path: "Sources/ChattySDK"),
