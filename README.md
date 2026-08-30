@@ -206,9 +206,26 @@ yet — it's backend work in `chatty-backend`.
 
 <br>
 
-Only shown when the bot's dashboard has voice enabled, and only fires `onVoiceCallPress` — this
-SDK doesn't bundle a voice-call implementation (a separate LiveKit integration, out of scope
-here).
+Only shown when the bot's dashboard has voice enabled, and fires `onVoiceCallPress`. A ready-to-
+present call screen, `ChattyVoiceCallView`, ships as a **separate product**, `ChattySDKVoice` —
+add it as an extra dependency in Xcode's Package Dependencies (or your `Package.swift`) alongside
+`ChattySDK` and it pulls in LiveKit's Swift SDK for you; apps that only need `ChattySDK` are
+unaffected:
+
+```swift
+@State private var showCall = false
+
+var body: some View {
+    if showCall {
+        ChattyVoiceCallView(client: client, sessionId: sessionId,
+            widgetStyle: theme?.widget_style, onClose: { showCall = false })
+    } else {
+        ChattyChatView(botId: "YOUR_BOT_ID", onVoiceCallPress: { showCall = true })
+    }
+}
+```
+
+Also add `NSMicrophoneUsageDescription` to your app's Info.plist.
 
 </details>
 
