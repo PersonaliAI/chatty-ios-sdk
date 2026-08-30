@@ -21,19 +21,19 @@ jobs:
       - name: Verify swift build
         run: swift build -c release
 
-      # `swift build` above leaves its own package checkouts in .build/checkouts.
-      # xcodebuild archive resolves the SAME remote packages again into each
-      # -derivedDataPath, and when both exist Xcode's package graph loader
-      # errors with "Cannot open <pkg> as a Swift Package Proxy because it is
-      # already open as a Swift User Managed Package Folder" — which silently
-      # drops the affected products from the target graph rather than failing
-      # loudly, so ChattySDKVoice's archive fails later with "Missing package
-      # product 'LiveKit'"/"'SwiftProtobuf'" instead. Only surfaced once a
-      # target (ChattySDKVoice) actually had external package dependencies —
-      # confirmed via two real CI archive failures.
-      - name: Clean SwiftPM build directory before archiving
-        run: rm -rf .build
-
+      # Every archive step below resolves the SAME Package.swift graph (LiveKit,
+      # swift-protobuf, etc.) into its OWN -derivedDataPath. Xcode's package
+      # loader tracks "open" packages by identity across those invocations, and
+      # resolving the same remote package into more than one derived-data
+      # location in the same job trips "Cannot open <pkg> as a Swift Package
+      # Proxy because it is already open as a Swift User Managed Package
+      # Folder" — which then silently drops that package's products from the
+      # graph instead of failing loudly, so ChattySDKVoice's archive fails
+      # later with "Missing package product 'LiveKit'"/"'SwiftProtobuf'".
+      # Pointing every xcodebuild invocation at one shared
+      # -clonedSourcePackagesDirPath makes them all reuse the same checkout
+      # instead of each resolving/cloning independently. Confirmed via three
+      # real CI archive failures — clearing .build alone did not fix it.
       - name: Archive for iOS device
         run: |
           xcodebuild archive \
@@ -41,6 +41,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -archivePath build/ChattySDK-iOS \
             -derivedDataPath build/DerivedData-iOS \
+            -clonedSourcePackagesDirPath build/SourcePackages \
             SKIP_INSTALL=NO \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             INSTALL_PATH=/Library/Frameworks
@@ -52,6 +53,7 @@ jobs:
             -destination "generic/platform=iOS Simulator" \
             -archivePath build/ChattySDK-iOS-Simulator \
             -derivedDataPath build/DerivedData-iOS-Simulator \
+            -clonedSourcePackagesDirPath build/SourcePackages \
             SKIP_INSTALL=NO \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             INSTALL_PATH=/Library/Frameworks
@@ -94,6 +96,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -archivePath build/ChattySDKVoice-iOS \
             -derivedDataPath build/DerivedData-iOS-Voice \
+            -clonedSourcePackagesDirPath build/SourcePackages \
             SKIP_INSTALL=NO \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             INSTALL_PATH=/Library/Frameworks
@@ -105,6 +108,7 @@ jobs:
             -destination "generic/platform=iOS Simulator" \
             -archivePath build/ChattySDKVoice-iOS-Simulator \
             -derivedDataPath build/DerivedData-iOS-Simulator-Voice \
+            -clonedSourcePackagesDirPath build/SourcePackages \
             SKIP_INSTALL=NO \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             INSTALL_PATH=/Library/Frameworks
