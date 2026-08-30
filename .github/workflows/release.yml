@@ -21,6 +21,19 @@ jobs:
       - name: Verify swift build
         run: swift build -c release
 
+      # `swift build` above leaves its own package checkouts in .build/checkouts.
+      # xcodebuild archive resolves the SAME remote packages again into each
+      # -derivedDataPath, and when both exist Xcode's package graph loader
+      # errors with "Cannot open <pkg> as a Swift Package Proxy because it is
+      # already open as a Swift User Managed Package Folder" — which silently
+      # drops the affected products from the target graph rather than failing
+      # loudly, so ChattySDKVoice's archive fails later with "Missing package
+      # product 'LiveKit'"/"'SwiftProtobuf'" instead. Only surfaced once a
+      # target (ChattySDKVoice) actually had external package dependencies —
+      # confirmed via two real CI archive failures.
+      - name: Clean SwiftPM build directory before archiving
+        run: rm -rf .build
+
       - name: Archive for iOS device
         run: |
           xcodebuild archive \
