@@ -34,7 +34,7 @@ composer with real SwiftUI views — no WKWebView, no JS bridge, no compromise o
 | **No WebView, anywhere** | Every bubble, avatar, and the composer are real SwiftUI views — no iframe, no JS bridge, no WKWebView overhead. |
 | **Matches your dashboard automatically** | Fetches the bot's theme and renders with the exact colors, corner radii, and launcher shape chosen in the dashboard — no manual styling. |
 | **Two integration shapes** | A floating [`ChattyLauncher`](#chattylauncher) button + sheet, or an embedded [`ChattyChatView`](#chattychatview) inside your own view hierarchy. |
-| **A real composer, not a stub** | Emoji picker, animated attach menu (camera + photo library), and mic-to-text voice notes — built in, not bolted on. |
+| **A real composer, not a stub** | Full-Unicode emoji picker (search + categories, ~1,850 emoji), animated attach menu (camera + photo library), and mic-to-text voice notes — built in, not bolted on. |
 | **Zero third-party dependencies** | Only Apple's own SwiftUI, PhotosUI, AVFoundation, and Foundation. |
 
 ## Install

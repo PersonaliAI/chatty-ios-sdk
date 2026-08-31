@@ -434,22 +434,8 @@ public struct ChattyChatView: View {
     }
 
     private var emojiPicker: some View {
-        let columns = Array(repeating: GridItem(.flexible()), count: 8)
-        return LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(ChattyEmojis.all, id: \.self) { emoji in
-                Text(emoji)
-                    .font(.system(size: 18))
-                    .frame(width: 32, height: 32)
-                    .onTapGesture { input += emoji }
-            }
-        }
-        .padding(6)
-        .frame(height: 160)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(red: 0.9, green: 0.91, blue: 0.92)))
-        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
-        .padding(.bottom, 8)
+        ChattyEmojiPickerView(onPick: { emoji in input += emoji })
+            .padding(.bottom, 8)
     }
 
     private func attachMenu(t: ChattyDesignTokens) -> some View {
@@ -595,16 +581,6 @@ func chattyAvatarSymbol(_ avatarIcon: String?) -> String {
     case "user": return "person.fill"
     default: return "bubble.left.fill"
     }
-}
-
-enum ChattyEmojis {
-    static let all = [
-        "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "😇",
-        "🥰", "😍", "🤩", "😘", "😋", "😛", "🤪", "😜", "🤔", "🤨", "😐", "😑",
-        "😶", "🙄", "😏", "😒", "😬", "🙁", "😢", "😭", "😤", "😡", "🥳", "😴",
-        "🤗", "🤝", "👍", "👎", "👏", "🙌", "🙏", "💪", "👋", "✌️", "🤞", "❤️",
-        "🔥", "✨", "🎉", "🎊", "⭐", "💯", "✅", "❌", "❓", "❗", "💬", "👀",
-    ]
 }
 
 private struct ChattyPulsingDot: View {
