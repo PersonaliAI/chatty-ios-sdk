@@ -132,7 +132,9 @@ public init(
     position: ChattyPosition = .bottomTrailing,
     color: Color? = nil,
     onVoiceCallPress: (() -> Void)? = nil,
-    onNotificationBellPress: (() -> Void)? = nil
+    onNotificationBellPress: (() -> Void)? = nil,
+    enableVoiceNotes: Bool = true,
+    enableNotificationBell: Bool = true
 )
 ```
 
@@ -145,6 +147,8 @@ public init(
 | `color` | Overrides the launcher color. Defaults to the active design's accent color. |
 | `onVoiceCallPress` | Forwarded to `ChattyChatView`'s header voice-call button. See [Notes](#notes). |
 | `onNotificationBellPress` | Forwarded to `ChattyChatView`'s header notification bell. See [Notes](#notes). |
+| `enableVoiceNotes` | Forwarded to `ChattyChatView`. See [Permissions](#permissions). |
+| `enableNotificationBell` | Forwarded to `ChattyChatView`. See [Permissions](#permissions). |
 
 ### `ChattyChatView`
 
@@ -156,7 +160,9 @@ public init(
     onMessage: ((ChattyMessage) -> Void)? = nil,
     onVoiceCallPress: (() -> Void)? = nil,
     onNotificationBellPress: (() -> Void)? = nil,
-    onClose: (() -> Void)? = nil
+    onClose: (() -> Void)? = nil,
+    enableVoiceNotes: Bool = true,
+    enableNotificationBell: Bool = true
 )
 ```
 
@@ -169,8 +175,42 @@ public init(
 | `onVoiceCallPress` | Header voice-call button tapped. Only shown when the bot's dashboard has voice enabled. See [Notes](#notes). |
 | `onNotificationBellPress` | Header notification-bell button tapped, after the OS permission prompt resolves. See [Notes](#notes). |
 | `onClose` | Renders a close (✕) button in the header when set. `ChattyLauncher` passes this for you. |
+| `enableVoiceNotes` | Default `true`. Set `false` to hide the composer's mic button — the SDK then never calls `AVAudioSession.requestRecordPermission` at all. See [Permissions](#permissions). |
+| `enableNotificationBell` | Default `true`. Set `false` to hide the header's bell button — the SDK then never calls `UNUserNotificationCenter.requestAuthorization` at all. See [Permissions](#permissions). |
 
 ### Notes
+
+<details open>
+<summary><strong id="permissions">Permissions — what this SDK requests, and how to opt out</strong></summary>
+
+<br>
+
+As a Swift Package, this SDK can't embed its own Info.plist usage-description keys — your app's
+Info.plist must declare them (see [Requirements](#requirements) below). But *when* the underlying
+OS permission API actually fires is controlled entirely by this SDK, in direct response to a
+specific button being tapped:
+
+| API called | Risk | Used for | Requested when |
+|---|---|---|---|
+| `AVAudioSession.requestRecordPermission` | Dangerous (microphone) | Composer mic button → voice-note transcription | User taps the mic button, only if `enableVoiceNotes` (default `true`) |
+| `UNUserNotificationCenter.requestAuthorization` | Sensitive (notifications) | Header bell button → local notification-permission ask | User taps the bell, only if `enableNotificationBell` (default `true`) |
+
+Camera and Photo Library don't appear here because this SDK never calls their permission APIs
+directly — `UIImagePickerController(sourceType: .camera)` and `PhotosPicker`/`PHPickerViewController`
+trigger their own OS-managed prompts (or, for the photo picker, no prompt at all) when presented,
+outside this SDK's control.
+
+The SDK **never calls a permission API speculatively or on load** — only in direct response to
+the matching button being tapped. If you don't want your app requesting mic access or
+notification authorization through this SDK at all, set the matching `enable*` param to `false`;
+the button disappears and the SDK will never touch that API. Your app remains free to request
+`AVAudioSession`/`UNUserNotificationCenter` permission itself, on its own schedule, for its own
+purposes — this SDK's opt-out only stops *this SDK* from requesting them.
+
+If `enableVoiceNotes` is `false`, you can also drop `NSMicrophoneUsageDescription` from your own
+Info.plist (nothing in the SDK will ever trigger the mic prompt to need it).
+
+</details>
 
 <details open>
 <summary><strong>Security — <code>bot_id</code> and domain restriction</strong></summary>

@@ -17,6 +17,8 @@ public struct ChattyLauncher: View {
     let colorOverride: Color?
     let onVoiceCallPress: (() -> Void)?
     let onNotificationBellPress: (() -> Void)?
+    let enableVoiceNotes: Bool
+    let enableNotificationBell: Bool
 
     @State private var open = false
     @State private var unread = 0
@@ -30,7 +32,9 @@ public struct ChattyLauncher: View {
         position: ChattyPosition = .bottomTrailing,
         color: Color? = nil,
         onVoiceCallPress: (() -> Void)? = nil,
-        onNotificationBellPress: (() -> Void)? = nil
+        onNotificationBellPress: (() -> Void)? = nil,
+        enableVoiceNotes: Bool = true,
+        enableNotificationBell: Bool = true
     ) {
         self.botId = botId
         self.baseURL = baseURL
@@ -39,6 +43,8 @@ public struct ChattyLauncher: View {
         self.colorOverride = color
         self.onVoiceCallPress = onVoiceCallPress
         self.onNotificationBellPress = onNotificationBellPress
+        self.enableVoiceNotes = enableVoiceNotes
+        self.enableNotificationBell = enableNotificationBell
     }
 
     private var tokens: ChattyDesignTokens { chattyDesignTokens[designId] ?? chattyDesignTokens["minimal"]! }
@@ -83,7 +89,9 @@ public struct ChattyLauncher: View {
                 onMessage: { _ in if !open { unread += 1 } },
                 onVoiceCallPress: onVoiceCallPress,
                 onNotificationBellPress: onNotificationBellPress,
-                onClose: { open = false }
+                onClose: { open = false },
+                enableVoiceNotes: enableVoiceNotes,
+                enableNotificationBell: enableNotificationBell
             )
         }
         .task { await loadDesign() }

@@ -33,6 +33,17 @@ public struct ChattyChatView: View {
     /// only on swipe-to-dismiss when embedding `ChattyChatView` in your own sheet/dialog.
     /// `ChattyLauncher` already does this for you.
     public var onClose: (() -> Void)?
+    /// Shows the composer's mic button and, on tap, requests microphone access (a dangerous
+    /// permission) via `AVAudioSession.requestRecordPermission`. Set `false` to hide the button
+    /// entirely — the SDK then never calls that API, so your app fully controls if/when/how mic
+    /// access is ever requested (including not at all). Your app's `NSMicrophoneUsageDescription`
+    /// Info.plist entry is still required if you leave this `true`; see the README's Permissions
+    /// section. Default `true`.
+    public var enableVoiceNotes: Bool
+    /// Shows the header's notification-bell button and, on tap, requests notification
+    /// authorization via `UNUserNotificationCenter.requestAuthorization`. Set `false` to hide the
+    /// button entirely — the SDK then never calls that API. Default `true`.
+    public var enableNotificationBell: Bool
 
     public init(
         botId: String,
@@ -41,7 +52,9 @@ public struct ChattyChatView: View {
         onMessage: ((ChattyMessage) -> Void)? = nil,
         onVoiceCallPress: (() -> Void)? = nil,
         onNotificationBellPress: (() -> Void)? = nil,
-        onClose: (() -> Void)? = nil
+        onClose: (() -> Void)? = nil,
+        enableVoiceNotes: Bool = true,
+        enableNotificationBell: Bool = true
     ) {
         let vm = ChattyViewModel(botId: botId, baseURL: baseURL, host: host)
         vm.onMessage = onMessage
@@ -49,6 +62,8 @@ public struct ChattyChatView: View {
         self.onVoiceCallPress = onVoiceCallPress
         self.onNotificationBellPress = onNotificationBellPress
         self.onClose = onClose
+        self.enableVoiceNotes = enableVoiceNotes
+        self.enableNotificationBell = enableNotificationBell
     }
 
     /// Falls back to primary_color-on-white when the bot uses an unrecognized
@@ -126,7 +141,9 @@ public struct ChattyChatView: View {
                 if viewModel.theme?.voice_enabled == true {
                     headerActionButton(systemName: "phone.fill", tint: t.headerText) { onVoiceCallPress?() }
                 }
-                headerActionButton(systemName: "bell.fill", tint: t.headerText) { onBellPress() }
+                if enableNotificationBell {
+                    headerActionButton(systemName: "bell.fill", tint: t.headerText) { onBellPress() }
+                }
                 headerActionButton(systemName: "arrow.counterclockwise", tint: t.headerText) { viewModel.clearChat() }
                 if let onClose {
                     headerActionButton(systemName: "xmark", tint: t.headerText, action: onClose)
@@ -358,10 +375,12 @@ public struct ChattyChatView: View {
                         .frame(width: 28, height: 28)
                 }
                 #if os(iOS)
-                Button(action: { isRecording ? stopRecordingAndTranscribe() : requestMicAndRecord() }) {
-                    Image(systemName: isRecording ? "stop.circle.fill" : "mic")
-                        .foregroundColor(isRecording ? Color(red: 0.937, green: 0.267, blue: 0.267) : Color(red: 0.61, green: 0.64, blue: 0.69))
-                        .frame(width: 28, height: 28)
+                if enableVoiceNotes {
+                    Button(action: { isRecording ? stopRecordingAndTranscribe() : requestMicAndRecord() }) {
+                        Image(systemName: isRecording ? "stop.circle.fill" : "mic")
+                            .foregroundColor(isRecording ? Color(red: 0.937, green: 0.267, blue: 0.267) : Color(red: 0.61, green: 0.64, blue: 0.69))
+                            .frame(width: 28, height: 28)
+                    }
                 }
                 #endif
                 Spacer()
