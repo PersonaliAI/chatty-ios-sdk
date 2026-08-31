@@ -19,6 +19,7 @@ public struct ChattyLauncher: View {
     let onNotificationBellPress: (() -> Void)?
     let enableVoiceNotes: Bool
     let enableNotificationBell: Bool
+    let enableLocationSharing: Bool
 
     @State private var open = false
     @State private var unread = 0
@@ -34,7 +35,8 @@ public struct ChattyLauncher: View {
         onVoiceCallPress: (() -> Void)? = nil,
         onNotificationBellPress: (() -> Void)? = nil,
         enableVoiceNotes: Bool = true,
-        enableNotificationBell: Bool = true
+        enableNotificationBell: Bool = true,
+        enableLocationSharing: Bool = true
     ) {
         self.botId = botId
         self.baseURL = baseURL
@@ -45,6 +47,7 @@ public struct ChattyLauncher: View {
         self.onNotificationBellPress = onNotificationBellPress
         self.enableVoiceNotes = enableVoiceNotes
         self.enableNotificationBell = enableNotificationBell
+        self.enableLocationSharing = enableLocationSharing
     }
 
     private var tokens: ChattyDesignTokens { chattyDesignTokens[designId] ?? chattyDesignTokens["minimal"]! }
@@ -91,7 +94,8 @@ public struct ChattyLauncher: View {
                 onNotificationBellPress: onNotificationBellPress,
                 onClose: { open = false },
                 enableVoiceNotes: enableVoiceNotes,
-                enableNotificationBell: enableNotificationBell
+                enableNotificationBell: enableNotificationBell,
+                enableLocationSharing: enableLocationSharing
             )
         }
         .task { await loadDesign() }

@@ -1,9 +1,11 @@
 import SwiftUI
 import PhotosUI
 import UserNotifications
+import CoreLocation
 #if os(iOS)
 import AVFoundation
 import UIKit
+import UniformTypeIdentifiers
 #endif
 
 /// Full Chatty chat screen: header (with voice/notification/clear-chat actions),
@@ -44,6 +46,14 @@ public struct ChattyChatView: View {
     /// authorization via `UNUserNotificationCenter.requestAuthorization`. Set `false` to hide the
     /// button entirely — the SDK then never calls that API. Default `true`.
     public var enableNotificationBell: Bool
+    /// Shows the attach menu's "Location" option and, on tap, requests when-in-use location
+    /// authorization via `CLLocationManager`. Set `false` to hide the option entirely — the SDK
+    /// then never calls that API. Matches the web widget's behavior: drops a Google Maps link
+    /// for the current fix into the composer text (not a special message type, and not sent
+    /// automatically — the user still taps send). Your app's `NSLocationWhenInUseUsageDescription`
+    /// Info.plist entry is still required if you leave this `true`; see the README's Permissions
+    /// section. Default `true`.
+    public var enableLocationSharing: Bool
 
     public init(
         botId: String,
@@ -54,7 +64,8 @@ public struct ChattyChatView: View {
         onNotificationBellPress: (() -> Void)? = nil,
         onClose: (() -> Void)? = nil,
         enableVoiceNotes: Bool = true,
-        enableNotificationBell: Bool = true
+        enableNotificationBell: Bool = true,
+        enableLocationSharing: Bool = true
     ) {
         let vm = ChattyViewModel(botId: botId, baseURL: baseURL, host: host)
         vm.onMessage = onMessage
@@ -64,6 +75,7 @@ public struct ChattyChatView: View {
         self.onClose = onClose
         self.enableVoiceNotes = enableVoiceNotes
         self.enableNotificationBell = enableNotificationBell
+        self.enableLocationSharing = enableLocationSharing
     }
 
     /// Falls back to primary_color-on-white when the bot uses an unrecognized
@@ -323,14 +335,30 @@ public struct ChattyChatView: View {
 
     @State private var showEmojiPicker = false
     @State private var showAttachMenu = false
+    @State private var locationFetcher = ChattyLocationFetcher()
     #if os(iOS)
     @State private var showCameraPicker = false
+    @State private var showDocumentPicker = false
     @State private var isRecording = false
     @State private var recordingSeconds = 0
     @State private var audioRecorder: AVAudioRecorder?
     @State private var recordingURL: URL?
     @State private var recordingTimer: Timer?
     #endif
+
+    // Matches the web widget exactly: drops a Google Maps link into the
+    // composer text rather than sending a special "location message" type —
+    // the user still has to tap send.
+    private func shareLocation() {
+        showAttachMenu = false
+        locationFetcher.requestLocation { location in
+            guard let location else { return }
+            DispatchQueue.main.async {
+                let link = "https://www.google.com/maps?q=\(location.coordinate.latitude),\(location.coordinate.longitude)"
+                input = input.isEmpty ? "📍 My location: \(link)" : "\(input) 📍 \(link)"
+            }
+        }
+    }
 
     private func composer(t: ChattyDesignTokens, accent: Color) -> some View {
         // Bordered rounded-16pt bar with the input on top and an icon row
@@ -415,6 +443,12 @@ public struct ChattyChatView: View {
                 }
             }
         }
+        .sheet(isPresented: $showDocumentPicker) {
+            DocumentPicker { url in
+                let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                viewModel.sendImage(fileURL: url, mimeType: mimeType, caption: "")
+            }
+        }
         #endif
     }
 
@@ -458,6 +492,18 @@ public struct ChattyChatView: View {
                     showAttachMenu = false
                     showPhotoAlert = true
                 }
+            }
+            #if os(iOS)
+            // UIDocumentPickerViewController is UIKit/iOS-only — no direct macOS
+            // equivalent (that'd be NSOpenPanel), same asymmetry as the camera
+            // option above.
+            attachMenuOption(systemName: "doc.fill", label: "Documents") {
+                showAttachMenu = false
+                showDocumentPicker = true
+            }
+            #endif
+            if enableLocationSharing {
+                attachMenuOption(systemName: "location.fill", label: "Location", action: shareLocation)
             }
         }
         .padding(10)
@@ -742,4 +788,79 @@ private struct CameraPicker: UIViewControllerRepresentable {
         }
     }
 }
+
+/// Wraps UIDocumentPickerViewController — the Files-app document browser.
+/// `asCopy: true` copies the picked file into a location this app can read
+/// without holding onto a security-scoped bookmark, matching how the camera/
+/// photo-library paths above already just work with a plain local file URL.
+private struct DocumentPicker: UIViewControllerRepresentable {
+    let onPicked: (URL) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        var types: [UTType] = [.pdf, .plainText, .rtf]
+        if let doc = UTType(filenameExtension: "doc") { types.append(doc) }
+        if let docx = UTType(filenameExtension: "docx") { types.append(docx) }
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPicked: onPicked) }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPicked: (URL) -> Void
+        init(onPicked: @escaping (URL) -> Void) { self.onPicked = onPicked }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            if let url = urls.first { onPicked(url) }
+        }
+    }
+}
 #endif
+
+/// Requests when-in-use location authorization and a single fix, then hands
+/// it back via completion. Not an ObservableObject — the caller (a View)
+/// applies the result directly rather than observing published state, so
+/// there's nothing here for SwiftUI to subscribe to.
+private final class ChattyLocationFetcher: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var completion: ((CLLocation?) -> Void)?
+
+    func requestLocation(completion: @escaping (CLLocation?) -> Void) {
+        self.completion = completion
+        manager.delegate = self
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        default:
+            completion(nil)
+            self.completion = nil
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        case .denied, .restricted:
+            completion?(nil)
+            completion = nil
+        default:
+            break
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        completion?(locations.first)
+        completion = nil
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        completion?(nil)
+        completion = nil
+    }
+}

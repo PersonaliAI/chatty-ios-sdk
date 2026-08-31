@@ -34,7 +34,7 @@ composer with real SwiftUI views — no WKWebView, no JS bridge, no compromise o
 | **No WebView, anywhere** | Every bubble, avatar, and the composer are real SwiftUI views — no iframe, no JS bridge, no WKWebView overhead. |
 | **Matches your dashboard automatically** | Fetches the bot's theme and renders with the exact colors, corner radii, and launcher shape chosen in the dashboard — no manual styling. |
 | **Two integration shapes** | A floating [`ChattyLauncher`](#chattylauncher) button + sheet, or an embedded [`ChattyChatView`](#chattychatview) inside your own view hierarchy. |
-| **A real composer, not a stub** | Full-Unicode emoji picker (search + categories, ~1,850 emoji), animated attach menu (camera + photo library), and mic-to-text voice notes — built in, not bolted on. |
+| **A real composer, not a stub** | Full-Unicode emoji picker (search + categories, ~1,850 emoji), animated attach menu (camera, photo library, documents, location), and mic-to-text voice notes — built in, not bolted on. |
 | **Zero third-party dependencies** | Only Apple's own SwiftUI, PhotosUI, AVFoundation, and Foundation. |
 
 ## Install
@@ -134,7 +134,8 @@ public init(
     onVoiceCallPress: (() -> Void)? = nil,
     onNotificationBellPress: (() -> Void)? = nil,
     enableVoiceNotes: Bool = true,
-    enableNotificationBell: Bool = true
+    enableNotificationBell: Bool = true,
+    enableLocationSharing: Bool = true
 )
 ```
 
@@ -149,6 +150,7 @@ public init(
 | `onNotificationBellPress` | Forwarded to `ChattyChatView`'s header notification bell. See [Notes](#notes). |
 | `enableVoiceNotes` | Forwarded to `ChattyChatView`. See [Permissions](#permissions). |
 | `enableNotificationBell` | Forwarded to `ChattyChatView`. See [Permissions](#permissions). |
+| `enableLocationSharing` | Forwarded to `ChattyChatView`. See [Permissions](#permissions). |
 
 ### `ChattyChatView`
 
@@ -162,7 +164,8 @@ public init(
     onNotificationBellPress: (() -> Void)? = nil,
     onClose: (() -> Void)? = nil,
     enableVoiceNotes: Bool = true,
-    enableNotificationBell: Bool = true
+    enableNotificationBell: Bool = true,
+    enableLocationSharing: Bool = true
 )
 ```
 
@@ -177,6 +180,7 @@ public init(
 | `onClose` | Renders a close (✕) button in the header when set. `ChattyLauncher` passes this for you. |
 | `enableVoiceNotes` | Default `true`. Set `false` to hide the composer's mic button — the SDK then never calls `AVAudioSession.requestRecordPermission` at all. See [Permissions](#permissions). |
 | `enableNotificationBell` | Default `true`. Set `false` to hide the header's bell button — the SDK then never calls `UNUserNotificationCenter.requestAuthorization` at all. See [Permissions](#permissions). |
+| `enableLocationSharing` | Default `true`. Set `false` to hide the attach menu's Location option — the SDK then never calls `CLLocationManager`'s authorization/location APIs at all. See [Permissions](#permissions). |
 
 ### Notes
 
@@ -194,21 +198,25 @@ specific button being tapped:
 |---|---|---|---|
 | `AVAudioSession.requestRecordPermission` | Dangerous (microphone) | Composer mic button → voice-note transcription | User taps the mic button, only if `enableVoiceNotes` (default `true`) |
 | `UNUserNotificationCenter.requestAuthorization` | Sensitive (notifications) | Header bell button → local notification-permission ask | User taps the bell, only if `enableNotificationBell` (default `true`) |
+| `CLLocationManager` authorization/location | Dangerous (location) | Attach menu's Location option → drops a Google Maps link into the composer text | User taps Location, only if `enableLocationSharing` (default `true`) |
 
 Camera and Photo Library don't appear here because this SDK never calls their permission APIs
 directly — `UIImagePickerController(sourceType: .camera)` and `PhotosPicker`/`PHPickerViewController`
 trigger their own OS-managed prompts (or, for the photo picker, no prompt at all) when presented,
-outside this SDK's control.
+outside this SDK's control. Documents (`UIDocumentPickerViewController`) needs no permission or
+Info.plist key at all — it's a sandboxed system file browser, iOS-only (no macOS equivalent is
+wired up, same as Camera).
 
 The SDK **never calls a permission API speculatively or on load** — only in direct response to
-the matching button being tapped. If you don't want your app requesting mic access or
-notification authorization through this SDK at all, set the matching `enable*` param to `false`;
-the button disappears and the SDK will never touch that API. Your app remains free to request
-`AVAudioSession`/`UNUserNotificationCenter` permission itself, on its own schedule, for its own
-purposes — this SDK's opt-out only stops *this SDK* from requesting them.
+the matching button being tapped. If you don't want your app requesting mic access, notification
+authorization, or location access through this SDK at all, set the matching `enable*` param to
+`false`; the button disappears and the SDK will never touch that API. Your app remains free to
+request `AVAudioSession`/`UNUserNotificationCenter`/`CLLocationManager` permission itself, on its
+own schedule, for its own purposes — this SDK's opt-out only stops *this SDK* from requesting them.
 
 If `enableVoiceNotes` is `false`, you can also drop `NSMicrophoneUsageDescription` from your own
-Info.plist (nothing in the SDK will ever trigger the mic prompt to need it).
+Info.plist (nothing in the SDK will ever trigger the mic prompt to need it). Same for
+`NSLocationWhenInUseUsageDescription` if `enableLocationSharing` is `false`.
 
 </details>
 
@@ -288,15 +296,17 @@ embedded full-screen chat against a live demo bot.
 - iOS 15+ (macOS 13+ for the library target)
 - Swift 5.7+, SwiftUI
 - Uses `async`/`await`, `@StateObject` — no third-party dependencies
-- **Add these keys to your app's `Info.plist`** to use the composer's mic and camera
-  buttons (a library target can't inject `Info.plist` entries — this has to be in the
-  consuming app):
+- **Add these keys to your app's `Info.plist`** to use the composer's mic, camera, and
+  attach-menu Location button (a library target can't inject `Info.plist` entries — this has to
+  be in the consuming app):
 
   ```xml
   <key>NSMicrophoneUsageDescription</key>
   <string>Used to record voice messages in chat.</string>
   <key>NSCameraUsageDescription</key>
   <string>Used to attach photos in chat.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Used to share your location in chat.</string>
   ```
 
   Without these, tapping the mic/camera silently does nothing (iOS kills the process on
