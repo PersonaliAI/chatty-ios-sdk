@@ -13,6 +13,14 @@ public struct ChattyTheme: Decodable {
     public let teaser_message: String?
     public let avatar_icon: String?
     public let avatar_url: String?
+    public let voice_enabled: Bool?
+}
+
+public struct ChattyVoiceToken: Decodable {
+    public let serverUrl: String
+    public let participantToken: String
+    public let roomName: String
+    public let participantName: String
 }
 
 public struct ChattyChatResponse: Decodable {
@@ -221,6 +229,23 @@ public final class ChattyClient {
         struct TranscribeResponse: Decodable { let text: String }
         let decoded: TranscribeResponse = try Self.decode(data)
         return decoded.text
+    }
+
+    /// Creates a short-lived LiveKit participant token. Connect the returned
+    /// values with the official LiveKit Swift client; API keys and provider
+    /// credentials remain on Chatty's backend.
+    public func createVoiceToken(sessionId: String, participantName: String = "Visitor") async throws -> ChattyVoiceToken {
+        var request = URLRequest(url: URL(string: "\(baseURL)/api/widget/voice/token")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "bot_id": botId,
+            "session_id": sessionId,
+            "participant_name": participantName,
+        ])
+        let (data, response) = try await session.data(for: request)
+        try Self.checkStatus(response)
+        return try Self.decode(data)
     }
 
     public func poll(sessionId: String, after: String) async throws -> ChattyPollResponse {

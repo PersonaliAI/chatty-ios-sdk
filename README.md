@@ -19,6 +19,16 @@ composer with real SwiftUI views — no WKWebView, no JS bridge, no compromise o
 
 </div>
 
+## LiveKit voice
+
+Call `ChattyClient(botId: botId).createVoiceToken(sessionId:)` and connect the
+returned token with the official LiveKit Swift client. `ChattyEmbedView`
+already includes the complete widget voice UI and real-time transcript for
+hosts that prefer zero native LiveKit setup.
+
+For a standalone screen, use `ChattyVoiceView(botId:)`; it loads the same
+official LiveKit UI in voice-only mode.
+
 ---
 
 > [!NOTE]
