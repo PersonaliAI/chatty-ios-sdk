@@ -13,7 +13,6 @@ public struct ChattyTheme: Decodable {
     public let teaser_message: String?
     public let avatar_icon: String?
     public let avatar_url: String?
-    public let voice_enabled: Bool?
 }
 
 public struct ChattyChatResponse: Decodable {
@@ -22,13 +21,6 @@ public struct ChattyChatResponse: Decodable {
     public let ai_paused: Bool?
     public let file_url: String?
     public let file_type: String?
-}
-
-public struct ChattyVoiceToken: Decodable {
-    public let token: String
-    public let livekit_url: String
-    public let room_name: String
-    public let session_id: String
 }
 
 public struct ChattyPollMessage: Decodable {
@@ -239,25 +231,6 @@ public final class ChattyClient {
             URLQueryItem(name: "after", value: after),
         ]
         let (data, response) = try await session.data(from: components.url!)
-        try Self.checkStatus(response)
-        return try Self.decode(data)
-    }
-
-    /// Mints a LiveKit room token + dispatches the voice agent for a call, same endpoint the
-    /// web widget uses. Only meaningful when `getTheme().voice_enabled` is true. This package
-    /// doesn't bundle the LiveKit client itself — see ChattyVoiceCallView, which needs the
-    /// LiveKit Swift SDK as a separate SPM dependency only apps actually using voice calls need
-    /// to add.
-    public func getVoiceToken(sessionId: String, visitorTimezone: String = "UTC") async throws -> ChattyVoiceToken {
-        var request = URLRequest(url: URL(string: "\(baseURL)/api/widget/voice/token")!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "bot_id": botId,
-            "session_id": sessionId,
-            "visitor_timezone": visitorTimezone,
-        ])
-        let (data, response) = try await session.data(for: request)
         try Self.checkStatus(response)
         return try Self.decode(data)
     }

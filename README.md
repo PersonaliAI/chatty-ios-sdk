@@ -131,7 +131,6 @@ public init(
     host: String? = nil,
     position: ChattyPosition = .bottomTrailing,
     color: Color? = nil,
-    onVoiceCallPress: (() -> Void)? = nil,
     onNotificationBellPress: (() -> Void)? = nil,
     enableVoiceNotes: Bool = true,
     enableNotificationBell: Bool = true,
@@ -146,7 +145,6 @@ public init(
 | `host` | Advisory only — sent to the backend but not used for access control. See [Notes](#notes). |
 | `position` | `.bottomLeading` or `.bottomTrailing`. Default `.bottomTrailing`. |
 | `color` | Overrides the launcher color. Defaults to the active design's accent color. |
-| `onVoiceCallPress` | Forwarded to `ChattyChatView`'s header voice-call button. See [Notes](#notes). |
 | `onNotificationBellPress` | Forwarded to `ChattyChatView`'s header notification bell. See [Notes](#notes). |
 | `enableVoiceNotes` | Forwarded to `ChattyChatView`. See [Permissions](#permissions). |
 | `enableNotificationBell` | Forwarded to `ChattyChatView`. See [Permissions](#permissions). |
@@ -160,7 +158,6 @@ public init(
     baseURL: String = chattyDefaultBaseURL,
     host: String? = nil,
     onMessage: ((ChattyMessage) -> Void)? = nil,
-    onVoiceCallPress: (() -> Void)? = nil,
     onNotificationBellPress: (() -> Void)? = nil,
     onClose: (() -> Void)? = nil,
     enableVoiceNotes: Bool = true,
@@ -175,7 +172,6 @@ public init(
 | `baseURL` | Chatty backend base URL. Defaults to the production API. |
 | `host` | Advisory only — sent to the backend but not used for access control. See [Notes](#notes). |
 | `onMessage` | Called for every inbound message — useful for unread badges or analytics. |
-| `onVoiceCallPress` | Header voice-call button tapped. Only shown when the bot's dashboard has voice enabled. See [Notes](#notes). |
 | `onNotificationBellPress` | Header notification-bell button tapped, after the OS permission prompt resolves. See [Notes](#notes). |
 | `onClose` | Renders a close (✕) button in the header when set. `ChattyLauncher` passes this for you. |
 | `enableVoiceNotes` | Default `true`. Set `false` to hide the composer's mic button — the SDK then never calls `AVAudioSession.requestRecordPermission` at all. See [Permissions](#permissions). |
@@ -246,34 +242,6 @@ is backgrounded needs APNs (or a wrapper like OneSignal) wired up at the app lev
 device token, send it to your backend, store it against the session/user, and have the backend
 call APNs when a message lands for a session that isn't actively polling. None of that exists
 yet — it's backend work in `chatty-backend`.
-
-</details>
-
-<details>
-<summary><strong>Voice-call button</strong></summary>
-
-<br>
-
-Only shown when the bot's dashboard has voice enabled, and fires `onVoiceCallPress`. A ready-to-
-present call screen, `ChattyVoiceCallView`, ships as a **separate product**, `ChattySDKVoice` —
-add it as an extra dependency in Xcode's Package Dependencies (or your `Package.swift`) alongside
-`ChattySDK` and it pulls in LiveKit's Swift SDK for you; apps that only need `ChattySDK` are
-unaffected:
-
-```swift
-@State private var showCall = false
-
-var body: some View {
-    if showCall {
-        ChattyVoiceCallView(client: client, sessionId: sessionId,
-            widgetStyle: theme?.widget_style, onClose: { showCall = false })
-    } else {
-        ChattyChatView(botId: "YOUR_BOT_ID", onVoiceCallPress: { showCall = true })
-    }
-}
-```
-
-Also add `NSMicrophoneUsageDescription` to your app's Info.plist.
 
 </details>
 

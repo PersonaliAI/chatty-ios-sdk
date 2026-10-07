@@ -9,13 +9,6 @@ struct ContentView: View {
     @State private var showFullScreen = false
     @State private var alertMessage: String?
 
-    // The SDK's voice-call/notification-bell buttons only fire a callback — it doesn't bundle
-    // a call implementation or push registration itself (see ChattyChatView's doc comments).
-    // These alerts just prove the buttons are wired up; a real app would launch its own
-    // LiveKit call screen / notification opt-in flow here instead.
-    private var onVoiceCallPress: () -> Void {
-        { alertMessage = "Voice call tapped — wire up your own call UI here" }
-    }
     private var onNotificationBellPress: () -> Void {
         { alertMessage = "Notification permission resolved — register for push here" }
     }
@@ -34,7 +27,6 @@ struct ContentView: View {
                     .padding()
                     ChattyChatView(
                         botId: demoBotID,
-                        onVoiceCallPress: onVoiceCallPress,
                         onNotificationBellPress: onNotificationBellPress
                     )
                 }
@@ -57,7 +49,6 @@ struct ContentView: View {
                     // manual color config needed here.
                     ChattyLauncher(
                         botId: demoBotID,
-                        onVoiceCallPress: onVoiceCallPress,
                         onNotificationBellPress: onNotificationBellPress
                     )
                 )

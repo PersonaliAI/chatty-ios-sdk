@@ -27,7 +27,6 @@ final class ChattyClientTests: XCTestCase {
                 "teaser_message": "Need help?",
                 "avatar_icon": "robot",
                 "avatar_url": NSNull(),
-                "voice_enabled": true,
             ], url: url)
         }
 
@@ -39,7 +38,6 @@ final class ChattyClientTests: XCTestCase {
         XCTAssertEqual(theme.widget_style, "minimal:#fff:bubble")
         XCTAssertEqual(theme.welcome_message, "Hi there")
         XCTAssertEqual(theme.conversation_starters, ["Hello", "Pricing?"])
-        XCTAssertEqual(theme.voice_enabled, true)
         XCTAssertNil(theme.avatar_url)
     }
 
@@ -52,7 +50,6 @@ final class ChattyClientTests: XCTestCase {
         let theme = try await makeClient().getTheme()
         XCTAssertNil(theme.name)
         XCTAssertNil(theme.welcome_message)
-        XCTAssertNil(theme.voice_enabled)
     }
 
     func testGetThemeBuildsExpectedURLAndQueryItems() async throws {

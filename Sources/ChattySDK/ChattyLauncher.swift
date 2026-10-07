@@ -15,7 +15,6 @@ public struct ChattyLauncher: View {
     let host: String?
     let position: ChattyPosition
     let colorOverride: Color?
-    let onVoiceCallPress: (() -> Void)?
     let onNotificationBellPress: (() -> Void)?
     let enableVoiceNotes: Bool
     let enableNotificationBell: Bool
@@ -32,7 +31,6 @@ public struct ChattyLauncher: View {
         host: String? = nil,
         position: ChattyPosition = .bottomTrailing,
         color: Color? = nil,
-        onVoiceCallPress: (() -> Void)? = nil,
         onNotificationBellPress: (() -> Void)? = nil,
         enableVoiceNotes: Bool = true,
         enableNotificationBell: Bool = true,
@@ -43,7 +41,6 @@ public struct ChattyLauncher: View {
         self.host = host
         self.position = position
         self.colorOverride = color
-        self.onVoiceCallPress = onVoiceCallPress
         self.onNotificationBellPress = onNotificationBellPress
         self.enableVoiceNotes = enableVoiceNotes
         self.enableNotificationBell = enableNotificationBell
@@ -90,7 +87,6 @@ public struct ChattyLauncher: View {
                 baseURL: baseURL,
                 host: host,
                 onMessage: { _ in if !open { unread += 1 } },
-                onVoiceCallPress: onVoiceCallPress,
                 onNotificationBellPress: onNotificationBellPress,
                 onClose: { open = false },
                 enableVoiceNotes: enableVoiceNotes,

@@ -8,7 +8,7 @@ import UIKit
 import UniformTypeIdentifiers
 #endif
 
-/// Full Chatty chat screen: header (with voice/notification/clear-chat actions),
+/// Full Chatty chat screen: header (with notification/clear-chat actions),
 /// message list, conversation starters, typing indicator, and composer (emoji
 /// picker, attach menu, mic recording). Equivalent to the web widget's embed
 /// iframe content — sizing/spacing/structure below is ported 1:1 from
@@ -22,10 +22,6 @@ public struct ChattyChatView: View {
     @StateObject private var viewModel: ChattyViewModel
     @State private var input: String = ""
 
-    /// Called when the header's voice-call button is tapped (only shown when the bot's
-    /// dashboard has voice enabled). This SDK doesn't bundle a voice-call implementation
-    /// itself (that's a separate LiveKit integration) — wire this up if your app has one.
-    public var onVoiceCallPress: (() -> Void)?
     /// Called when the header's notification-bell button is tapped, after the OS
     /// notification-permission prompt has been resolved either way. Native apps still need
     /// their own push infrastructure (FCM/APNs) to actually *deliver* a notification when a
@@ -60,7 +56,6 @@ public struct ChattyChatView: View {
         baseURL: String = chattyDefaultBaseURL,
         host: String? = nil,
         onMessage: ((ChattyMessage) -> Void)? = nil,
-        onVoiceCallPress: (() -> Void)? = nil,
         onNotificationBellPress: (() -> Void)? = nil,
         onClose: (() -> Void)? = nil,
         enableVoiceNotes: Bool = true,
@@ -70,7 +65,6 @@ public struct ChattyChatView: View {
         let vm = ChattyViewModel(botId: botId, baseURL: baseURL, host: host)
         vm.onMessage = onMessage
         _viewModel = StateObject(wrappedValue: vm)
-        self.onVoiceCallPress = onVoiceCallPress
         self.onNotificationBellPress = onNotificationBellPress
         self.onClose = onClose
         self.enableVoiceNotes = enableVoiceNotes
@@ -150,9 +144,6 @@ public struct ChattyChatView: View {
             }
             Spacer()
             HStack(spacing: 2) {
-                if viewModel.theme?.voice_enabled == true {
-                    headerActionButton(systemName: "phone.fill", tint: t.headerText) { onVoiceCallPress?() }
-                }
                 if enableNotificationBell {
                     headerActionButton(systemName: "bell.fill", tint: t.headerText) { onBellPress() }
                 }

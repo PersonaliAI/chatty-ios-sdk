@@ -21,19 +21,6 @@ jobs:
       - name: Verify swift build
         run: swift build -c release
 
-      # Every archive step below resolves the SAME Package.swift graph (LiveKit,
-      # swift-protobuf, etc.) into its OWN -derivedDataPath. Xcode's package
-      # loader tracks "open" packages by identity across those invocations, and
-      # resolving the same remote package into more than one derived-data
-      # location in the same job trips "Cannot open <pkg> as a Swift Package
-      # Proxy because it is already open as a Swift User Managed Package
-      # Folder" — which then silently drops that package's products from the
-      # graph instead of failing loudly, so ChattySDKVoice's archive fails
-      # later with "Missing package product 'LiveKit'"/"'SwiftProtobuf'".
-      # Pointing every xcodebuild invocation at one shared
-      # -clonedSourcePackagesDirPath makes them all reuse the same checkout
-      # instead of each resolving/cloning independently. Confirmed via three
-      # real CI archive failures — clearing .build alone did not fix it.
       - name: Archive for iOS device
         run: |
           xcodebuild archive \
@@ -84,69 +71,6 @@ jobs:
       - name: Zip XCFramework
         run: cd build && zip -r ChattySDK.xcframework.zip ChattySDK.xcframework
 
-      # Mirrors the ChattySDK archive steps above for the second product —
-      # ChattySDKVoice is its own scheme/target (see Package.swift's own
-      # comment on why it's split out), so it needs its own device +
-      # simulator archive and XCFramework, not just riding along with
-      # ChattySDK's.
-      #
-      # No BUILD_LIBRARY_FOR_DISTRIBUTION here (unlike ChattySDK above):
-      # ChattySDKVoice pulls in LiveKit's LiveKitUniFFI target, which wraps a
-      # precompiled binary xcframework (RustLiveKitUniFFI) rather than Swift
-      # source. Xcode's library-evolution module-interface verification can't
-      # see through that binary target and fails with "no such module
-      # 'RustLiveKitUniFFI'" / "failed to verify module interface of
-      # 'LiveKitUniFFI'" — a real Xcode/SPM limitation with binary targets
-      # under BUILD_LIBRARY_FOR_DISTRIBUTION, confirmed via CI, not something
-      # fixable in this package's own code. Consumers of ChattySDKVoice.
-      # xcframework should build with the same major Xcode/Swift version this
-      # release used (see ci.yml's pinned Xcode 15.4) rather than relying on
-      # forward ABI stability.
-      - name: Archive ChattySDKVoice for iOS device
-        run: |
-          xcodebuild archive \
-            -scheme ChattySDKVoice \
-            -destination "generic/platform=iOS" \
-            -archivePath build/ChattySDKVoice-iOS \
-            -derivedDataPath build/DerivedData-iOS-Voice \
-            -clonedSourcePackagesDirPath build/SourcePackages \
-            SKIP_INSTALL=NO \
-            INSTALL_PATH=/Library/Frameworks
-
-      - name: Archive ChattySDKVoice for iOS Simulator
-        run: |
-          xcodebuild archive \
-            -scheme ChattySDKVoice \
-            -destination "generic/platform=iOS Simulator" \
-            -archivePath build/ChattySDKVoice-iOS-Simulator \
-            -derivedDataPath build/DerivedData-iOS-Simulator-Voice \
-            -clonedSourcePackagesDirPath build/SourcePackages \
-            SKIP_INSTALL=NO \
-            INSTALL_PATH=/Library/Frameworks
-
-      - name: Locate built ChattySDKVoice frameworks
-        id: locate-voice
-        run: |
-          device_fw=$(find build -path "*ChattySDKVoice-iOS.xcarchive*ChattySDKVoice.framework" -type d | head -1)
-          sim_fw=$(find build -path "*ChattySDKVoice-iOS-Simulator.xcarchive*ChattySDKVoice.framework" -type d | head -1)
-          if [ -z "$device_fw" ] || [ -z "$sim_fw" ]; then
-            echo "::error::Could not locate ChattySDKVoice.framework in one or both archives"
-            find build -maxdepth 8 \( -type d -o -name "*.framework" \)
-            exit 1
-          fi
-          echo "device_fw=$device_fw" >> "$GITHUB_OUTPUT"
-          echo "sim_fw=$sim_fw" >> "$GITHUB_OUTPUT"
-
-      - name: Create ChattySDKVoice XCFramework
-        run: |
-          xcodebuild -create-xcframework \
-            -framework "${{ steps.locate-voice.outputs.device_fw }}" \
-            -framework "${{ steps.locate-voice.outputs.sim_fw }}" \
-            -output build/ChattySDKVoice.xcframework
-
-      - name: Zip ChattySDKVoice XCFramework
-        run: cd build && zip -r ChattySDKVoice.xcframework.zip ChattySDKVoice.xcframework
-
       # CocoaPods Trunk publish requires COCOAPODS_TRUNK_TOKEN (from `pod
       # trunk register`) as a repo secret — skipped automatically until set.
       # ChattySDKVoice has no podspec yet (CocoaPods distribution for it is
@@ -165,7 +89,6 @@ jobs:
           generate_release_notes: true
           files: |
             build/ChattySDK.xcframework.zip
-            build/ChattySDKVoice.xcframework.zip
 
   example-app-simulator:
     name: Build example app (Simulator)
