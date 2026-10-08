@@ -234,7 +234,7 @@ public final class ChattyClient {
     /// Creates a short-lived LiveKit participant token. Connect the returned
     /// values with the official LiveKit Swift client; API keys and provider
     /// credentials remain on Chatty's backend.
-    public func createVoiceToken(sessionId: String, participantName: String = "Visitor") async throws -> ChattyVoiceToken {
+    public func createVoiceToken(sessionId: String, participantName: String = "Visitor", visitorTimezone: String = TimeZone.current.identifier) async throws -> ChattyVoiceToken {
         var request = URLRequest(url: URL(string: "\(baseURL)/api/widget/voice/token")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -242,6 +242,7 @@ public final class ChattyClient {
             "bot_id": botId,
             "session_id": sessionId,
             "participant_name": participantName,
+            "visitor_timezone": visitorTimezone,
         ])
         let (data, response) = try await session.data(for: request)
         try Self.checkStatus(response)
